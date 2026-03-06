@@ -1,41 +1,62 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import PageHeader from '@/components/PageHeader';
 import { useToast } from '@/components/Toast';
-import { getAllApps } from '@/lib/mock-data';
 
 export default function LoginPage() {
   const { pushToast } = useToast();
-  const apps = useMemo(() => getAllApps(), []);
-  const sample = apps.find((a) => a.slug === 'deadcells') || apps[0];
+  const router = useRouter();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  function onSubmit(e) {
+  async function onSubmit(e) {
     e.preventDefault();
     setLoading(true);
 
-    // Mock auth only.
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        pushToast({
+          title: 'Login failed',
+          message: data?.message || 'Invalid email or password.',
+          intent: 'danger',
+        });
+        setLoading(false);
+        return;
+      }
+
       pushToast({
-        title: 'Mock login successful',
-        message: 'Auth is not implemented yet. Redirecting to sample app…',
+        title: 'Login successful',
+        message: 'Redirecting to home...',
         intent: 'success',
       });
-      if (sample) window.location.href = `/${sample.slug}`;
-    }, 500);
+      router.push('/');
+    } catch (err) {
+      pushToast({
+        title: 'Login failed',
+        message: 'Network error. Please try again.',
+        intent: 'danger',
+      });
+      setLoading(false);
+    }
   }
 
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <PageHeader
-        title="Login (mock)"
-        subtitle="This screen is UI-only. Replace with real authentication later."
+        title="Login"
+        subtitle="Use the account created in the database."
         actions={
           <Link
             href="/"
@@ -65,7 +86,7 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
+              placeholder="********"
               className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm"
               required
             />
@@ -76,12 +97,8 @@ export default function LoginPage() {
             disabled={loading}
             className="inline-flex w-full items-center justify-center rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
           >
-            {loading ? 'Signing in…' : 'Login'}
+            {loading ? 'Signing in...' : 'Login'}
           </button>
-
-          <p className="text-xs text-slate-500">
-            Note: this project has no backend/auth yet. This form only demonstrates UI flow.
-          </p>
         </form>
       </div>
     </div>

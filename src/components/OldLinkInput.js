@@ -1,23 +1,24 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { parseSlugFromInput } from '@/lib/utils';
-import { useToast } from '@/components/Toast';
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { parseSlugFromInput } from "@/lib/utils";
+import { useToast } from "@/components/Toast";
 
 export default function OldLinkInput() {
   const router = useRouter();
   const { pushToast } = useToast();
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState("");
 
   function onSubmit(e) {
     e.preventDefault();
     const slug = parseSlugFromInput(value);
     if (!slug) {
       pushToast({
-        title: 'Invalid link/slug',
-        message: 'Paste a URL like https://example.com/deadcells or type a slug like deadcells.',
-        intent: 'warning',
+        title: "Invalid link/slug",
+        message:
+          "Paste a URL like https://example.com/deadcells or type a slug like deadcells.",
+        intent: "warning",
       });
       return;
     }
@@ -42,7 +43,8 @@ export default function OldLinkInput() {
         </button>
       </div>
       <p className="text-xs text-slate-500">
-        Parsing logic extracts the last path segment and keeps only letters/numbers/hyphen/underscore.
+        Parsing logic extracts the last path segment and keeps only
+        letters/numbers/hyphen/underscore.
       </p>
     </form>
   );

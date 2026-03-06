@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
-import { getAllAppsPublic } from '@/lib/mock-data';
+import { prisma } from "@/lib/prisma";
 
-// Mock API endpoint. Replace with real data source later.
-export function GET() {
-  return NextResponse.json({
-    ok: true,
-    data: getAllAppsPublic(),
+export async function GET() {
+  const apps = await prisma.app.findMany({
+    select: { id: true, slug: true, name: true, packageType: true },
+    orderBy: { createdAt: "desc" },
   });
+
+  return Response.json({ success: true, apps });
 }

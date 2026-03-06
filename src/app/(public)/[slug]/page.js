@@ -1,13 +1,13 @@
-import { notFound } from 'next/navigation';
-import PageHeader from '@/components/PageHeader';
-import SummaryCard from '@/components/SummaryCard';
-import CredentialPanel from '@/components/CredentialPanel';
-import FaqAccordion from '@/components/FaqAccordion';
-import GuidePanel from '@/components/GuidePanel';
-import SpecialAlert from '@/components/SpecialAlert';
-import StatusBadge from '@/components/StatusBadge';
-import { getAppBySlug, isSpecialPackageType } from '@/lib/mock-data';
-import { formatDate, formatDaysLeft } from '@/lib/utils';
+import { notFound } from "next/navigation";
+import PageHeader from "@/components/PageHeader";
+import SummaryCard from "@/components/SummaryCard";
+import CredentialPanel from "@/components/CredentialPanel";
+import FaqAccordion from "@/components/FaqAccordion";
+import GuidePanel from "@/components/GuidePanel";
+import SpecialAlert from "@/components/SpecialAlert";
+import StatusBadge from "@/components/StatusBadge";
+import { getAppBySlug, isSpecialPackageType } from "@/lib/mock-data";
+import { formatDate, formatDaysLeft } from "@/lib/utils";
 
 export default function AppDetailPage({ params }) {
   const app = getAppBySlug(params.slug);
@@ -22,7 +22,8 @@ export default function AppDetailPage({ params }) {
         title={app.name}
         subtitle={
           <span>
-            Slug: <span className="font-mono text-slate-700">/{app.slug}</span> · Package:{' '}
+            Slug: <span className="font-mono text-slate-700">/{app.slug}</span>{" "}
+            · Package:{" "}
             <span className="font-mono text-slate-700">{app.packageType}</span>
           </span>
         }
@@ -37,9 +38,9 @@ export default function AppDetailPage({ params }) {
         <SpecialAlert
           packageType={app.packageType}
           message={
-            app.packageType === 'FULL_DLC'
-              ? 'FULL_DLC: After downloading DLC content, open the app once before signing out from the ID to ensure content is activated.'
-              : 'FULL_INAPP: After purchase/download, open the app and verify items are present before signing out from the ID.'
+            app.packageType === "FULL_DLC"
+              ? "FULL_DLC: Sau khi tải xuống các nội dung DLC, hãy mở ứng dụng một lần trước khi đăng xuất ID để đảm bảo các nội dung này đã được kích hoạt."
+              : "FULL_INAPP: Sau khi mua hoặc tải xuống, hãy mở ứng dụng và xác nhận các vật phẩm đã xuất hiện trước khi đăng xuất tài khoản ID."
           }
         />
       )}
@@ -48,11 +49,17 @@ export default function AppDetailPage({ params }) {
         <div className="p-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">App overview</div>
-              <div className="mt-1 text-sm text-slate-600">{app.description}</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                App overview
+              </div>
+              <div className="mt-1 text-sm text-slate-600">
+                {app.description}
+              </div>
             </div>
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">App banner</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                App banner
+              </div>
               <div className="mt-2 flex h-12 w-56 items-center justify-center rounded-lg bg-gradient-to-r from-slate-200 to-slate-100 text-xs text-slate-500">
                 Placeholder image
               </div>
@@ -89,7 +96,11 @@ export default function AppDetailPage({ params }) {
           <FaqAccordion items={app.faq} />
 
           <div id="guide" />
-          <GuidePanel title="Usage guide" steps={app.guide.steps} notes={app.guide.notes} />
+          <GuidePanel
+            title="Usage guide"
+            steps={app.guide.steps}
+            notes={app.guide.notes}
+          />
         </section>
       </div>
     </div>
