@@ -1,7 +1,15 @@
-'use client';
+"use client";
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  useEffect,
+} from "react";
+import { cn } from "@/lib/utils";
 
 const ToastContext = createContext(null);
 
@@ -23,7 +31,7 @@ export function ToastProvider({ children }) {
   }, []);
 
   const pushToast = useCallback(
-    ({ title, message, intent = 'info', ttlMs = 3500 }) => {
+    ({ title, message, intent = "info", ttlMs = 3500 }) => {
       const id = makeId();
       const toast = { id, title, message, intent };
       setToasts((prev) => [toast, ...prev].slice(0, 4));
@@ -31,25 +39,44 @@ export function ToastProvider({ children }) {
       timers.current.set(id, timer);
       return id;
     },
-    [removeToast]
+    [removeToast],
   );
 
-  const value = useMemo(() => ({ toasts, pushToast, removeToast }), [toasts, pushToast, removeToast]);
+  useEffect(() => {
+    window.showToast = (title, message, isInfo) => {
+      pushToast({
+        title: title || "Notice",
+        message,
+        intent: isInfo ? "info" : "success",
+      });
+    };
 
-  return <ToastContext.Provider value={value}>{children}</ToastContext.Provider>;
+    return () => {
+      delete window.showToast;
+    };
+  }, [pushToast]);
+
+  const value = useMemo(
+    () => ({ toasts, pushToast, removeToast }),
+    [toasts, pushToast, removeToast],
+  );
+
+  return (
+    <ToastContext.Provider value={value}>{children}</ToastContext.Provider>
+  );
 }
 
 export function useToast() {
   const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error('useToast must be used within ToastProvider');
+  if (!ctx) throw new Error("useToast must be used within ToastProvider");
   return ctx;
 }
 
 const INTENT_CLASS = {
-  info: 'border-slate-200 bg-white text-slate-900',
-  success: 'border-emerald-200 bg-emerald-50 text-emerald-900',
-  warning: 'border-amber-200 bg-amber-50 text-amber-900',
-  danger: 'border-rose-200 bg-rose-50 text-rose-900',
+  info: "border-slate-200 bg-white text-slate-900",
+  success: "border-emerald-200 bg-emerald-50 text-emerald-900",
+  warning: "border-amber-200 bg-amber-50 text-amber-900",
+  danger: "border-rose-200 bg-rose-50 text-rose-900",
 };
 
 export function ToastViewport() {
@@ -66,14 +93,16 @@ export function ToastViewport() {
         <div
           key={t.id}
           className={cn(
-            'pointer-events-auto rounded-2xl border p-4 shadow-card',
-            INTENT_CLASS[t.intent] || INTENT_CLASS.info
+            "pointer-events-auto rounded-2xl border p-4 shadow-card",
+            INTENT_CLASS[t.intent] || INTENT_CLASS.info,
           )}
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="text-sm font-semibold">{t.title || 'Notice'}</div>
-              {t.message ? <div className="mt-1 text-sm opacity-80">{t.message}</div> : null}
+              <div className="text-sm font-semibold">{t.title || "Notice"}</div>
+              {t.message ? (
+                <div className="mt-1 text-sm opacity-80">{t.message}</div>
+              ) : null}
             </div>
             <button
               type="button"

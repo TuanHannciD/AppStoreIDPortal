@@ -121,7 +121,7 @@ export default function SharePageForm() {
 
       <form onSubmit={onSubmit} className="space-y-6">
         {/* Share info */}
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-4">
+        <div className="rounded-2xl border border-neutral-800 p-4 space-y-4">
           <div>
             <div className="text-sm font-semibold">Share link info</div>
           </div>
@@ -224,7 +224,7 @@ export default function SharePageForm() {
         </div>
 
         {/* Pass mode */}
-        <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
+        <div className="rounded-2xl border border-neutral-800 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold">Pass mode</div>

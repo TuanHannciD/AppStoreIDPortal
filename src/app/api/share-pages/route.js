@@ -31,6 +31,47 @@ const CreateSharePageSchema = z.object({
     .min(1),
 });
 
+// API lấy dữ liệu bảng
+export async function GET() {
+  try {
+    const items = await prisma.sharePage.findMany({
+      include: {
+        app: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            packageType: true,
+          },
+        },
+        _count: {
+          select: {
+            passes: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return Response.json({
+      success: true,
+      items,
+    });
+  } catch (err) {
+    return Response.json(
+      {
+        success: false,
+        message: "Failed to load share pages",
+        detail: String(err?.message || err),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+
 export async function POST(req) {
   try {
     const body = await req.json();

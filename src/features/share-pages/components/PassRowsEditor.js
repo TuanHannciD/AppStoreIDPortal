@@ -19,7 +19,7 @@ export default function PassRowsEditor({ mode, passes, onChange }) {
   }
 
   return (
-    <div className="rounded-2xl border border-neutral-800 bg-neutral-900/40 p-4 space-y-3">
+    <div className="rounded-2xl border border-neutral-800 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm font-semibold">Passes & Quota</div>
