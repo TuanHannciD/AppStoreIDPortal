@@ -1,4 +1,3 @@
-//Hàm này dùng để chuyển dữ liệu từ form (frontend) thành payload chuẩn gửi lên API.
 export function mapFormToCreatePayload(form) {
   return {
     appId: form.appId,
@@ -7,6 +6,11 @@ export function mapFormToCreatePayload(form) {
       ? new Date(form.expiresAt).toISOString()
       : null,
     code: form.code?.trim() ? form.code.trim() : null,
+
+    // CHANGED:
+    // Đồng bộ access behavior từ form xuống backend.
+    consumeOnVerify: Boolean(form.consumeOnVerify),
+
     passes: form.passes.map((p) => ({
       pass: (p.pass || "").trim(),
       quota: Number(p.quota),

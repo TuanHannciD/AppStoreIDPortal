@@ -33,7 +33,7 @@ export default function SharePageEditModal({
   const [detail, setDetail] = useState(null);
   const [form, setForm] = useState({
     note: "",
-    expiresAt: "",
+    expiresAt: toDateTimeLocal(new Date()), // mặc định hôm nay
   });
 
   useEffect(() => {
@@ -73,7 +73,9 @@ export default function SharePageEditModal({
     try {
       const res = await updateSharePage(sharePageId, {
         note: form.note.trim() || null,
-        expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
+        expiresAt: form.expiresAt
+          ? new Date(form.expiresAt).toISOString()
+          : null,
       });
 
       if (!res?.success) {
@@ -100,7 +102,9 @@ export default function SharePageEditModal({
           </DialogDescription>
         </DialogHeader>
 
-        {loading && <div className="py-8 text-sm text-muted-foreground">Loading...</div>}
+        {loading && (
+          <div className="py-8 text-sm text-muted-foreground">Loading...</div>
+        )}
 
         {error && (
           <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-600">
@@ -125,25 +129,35 @@ export default function SharePageEditModal({
                 <label className="text-muted-foreground mb-1 block">Note</label>
                 <textarea
                   value={form.note}
-                  onChange={(e) => setForm((s) => ({ ...s, note: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, note: e.target.value }))
+                  }
                   rows={4}
                   className="w-full rounded-md border bg-background px-3 py-2"
                 />
               </div>
 
               <div>
-                <label className="text-muted-foreground mb-1 block">Expires At</label>
+                <label className="text-muted-foreground mb-1 block">
+                  Expires At
+                </label>
                 <input
                   type="datetime-local"
                   value={form.expiresAt}
-                  onChange={(e) => setForm((s) => ({ ...s, expiresAt: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((s) => ({ ...s, expiresAt: e.target.value }))
+                  }
                   className="w-full rounded-md border bg-background px-3 py-2"
                 />
               </div>
             </div>
 
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange?.(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange?.(false)}
+              >
                 Cancel
               </Button>
               <Button type="submit" disabled={saving}>

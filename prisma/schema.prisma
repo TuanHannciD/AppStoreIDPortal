@@ -1,8 +1,24 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// ============================================================================
+// Prisma Schema
+// ============================================================================
+// Mục tiêu hệ thống:
+// 1. Admin tạo App
+// 2. Admin tạo SharePage cho App
+// 3. Mỗi SharePage có nhiều SharePass
+// 4. User mở share link -> nhập pass -> server verify pass
+// 5. Sau khi verify thành công, UI chỉ hiện trạng thái verified,
+//    CHƯA show full thông tin account và CHƯA trừ quota
+// 6. Khi user bấm "Xem thông tin account", server mới:
+//    - kiểm tra verification token
+//    - lấy full account info
+//    - trừ quota
+//    - log hành động reveal
+//
+// Thiết kế này giúp:
+// - verify pass không làm mất lượt
+// - chỉ khi user thực sự xem account mới consume quota
+// - dễ audit và quản lý lịch sử sử dụng
+// ============================================================================
 
 generator client {
   provider               = "prisma-client"
@@ -18,7 +34,28 @@ datasource db {
   provider = "postgresql"
 }
 
-// schema.prisma (core tables)
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum Role {
+  // Toàn quyền hệ thống
+  SUPER_ADMIN
+
+  // Quản trị viên
+  ADMIN
+
+  // User thường
+  USER
+}
+
+// ============================================================================
+// USER
+// ============================================================================
+// Bảng user dùng để quản lý người sở hữu app / share page.
+// Hiện tại App đã có owner.
+// SharePage cũng có thể có owner riêng để audit ai đã tạo share page đó.
+// ============================================================================
 
 model User {
   id       String @id @default(cuid())
@@ -26,14 +63,30 @@ model User {
   password String
   role     Role   @default(SUPER_ADMIN)
 
+  // Một user có thể sở hữu nhiều app
   apps App[]
+
+  // Một user có thể tạo nhiều share page
+  sharePages SharePage[]
 }
 
-enum Role {
-  SUPER_ADMIN
-  ADMIN
-  USER
-}
+// ============================================================================
+// APP
+// ============================================================================
+// Đây là thực thể gốc của hệ thống.
+//
+// Ví dụ:
+// - Netflix
+// - Spotify
+// - Apple ID package
+//
+// Một App có thể có:
+// - nhiều SharePage
+// - nhiều AppAccount
+//
+// AppAccount là dữ liệu account thật của app.
+// SharePage là "cổng chia sẻ" để public ra ngoài cho user nhập pass.
+// ============================================================================
 
 model App {
   id          String  @id @default(cuid())
@@ -41,90 +94,225 @@ model App {
   name        String
   packageType String
   description String?
+
+  // Chủ sở hữu app
   ownerId String
   owner   User   @relation(fields: [ownerId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Một app có thể có nhiều link share
   sharePages SharePage[]
+
+  // Một app có thể có nhiều account thật
+  appAccounts AppAccount[]
 }
+
+// ============================================================================
+// SHARE PAGE
+// ============================================================================
+// SharePage là link public mà user sẽ truy cập.
+//
+// Ví dụ:
+// /share/ABC123
+//
+// SharePage gắn với 1 App, và có:
+// - nhiều pass
+// - nhiều log
+// - nhiều account được phép reveal
+//
+// Tại sao cần SharePage?
+// Vì cùng 1 App có thể có nhiều link share khác nhau,
+// mỗi link có policy khác nhau:
+// - ngày hết hạn khác nhau
+// - pass khác nhau
+// - quota khác nhau
+// - rate limit khác nhau
+// ============================================================================
 
 model SharePage {
   id    String @id @default(cuid())
+
+  // Code public nằm trên URL
+  // Ví dụ: /share/ABC123
   code  String @unique
+
+  // App được share bởi link này
   appId String
   app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
 
+  // Ghi chú nội bộ cho admin
   note      String?
+
+  // Nếu đến thời gian này thì link hết hạn
   expiresAt DateTime?
 
-  // Policy chung cho share page (áp lên tất cả pass của page này)
-  // Nếu bạn muốn mỗi pass có policy riêng, chuyển các field này xuống SharePass.
+  // --------------------------------------------------------------------------
+  // Rate limit policy cho share page
+  // Mục đích: chống spam verify / reveal quá nhiều lần trong thời gian ngắn
+  // --------------------------------------------------------------------------
   rateEnabled     Boolean @default(true)
-  rateWindowSec   Int     @default(60) // vd 60
-  rateMaxRequests Int     @default(30) // vd 30
+  rateWindowSec   Int     @default(60) // cửa sổ thời gian, ví dụ 60 giây
+  rateMaxRequests Int     @default(30) // số request tối đa trong 1 cửa sổ
 
-  // Quota mặc định cấp cho mỗi pass (mỗi user)
+  // --------------------------------------------------------------------------
+  // Quota mặc định cho pass mới tạo trong page này
+  // Ví dụ passQuotaTotal = 50
+  // => pass mới tạo mặc định có quotaTotal = 50
+  // --------------------------------------------------------------------------
   passQuotaTotal Int @default(50)
 
-  // Hành vi trừ lượt khi submit pass
-  // Khách yêu cầu "mỗi lần nhập pass lại trừ" => true
-  consumeOnVerify Boolean @default(true)
+  // --------------------------------------------------------------------------
+  // Cho biết có trừ quota ngay khi verify hay không.
+  // Với flow mới hiện tại:
+  // - verify: KHÔNG trừ quota
+  // - reveal account: MỚI trừ quota
+  //
+  // Vì vậy default nên là false.
+  // Nếu sau này đổi policy, field này vẫn có thể hỗ trợ branching logic.
+  // --------------------------------------------------------------------------
+  consumeOnVerify Boolean @default(false)
+
+  // Người tạo share page
   ownerId String?
+  owner   User?   @relation(fields: [ownerId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Danh sách pass của share page này
   passes SharePass[]
+
+  // Log verify / reveal / rate limit / block...
   logs   ShareAuthLog[]
+
+  // Mapping các account được phép reveal trong share page này
+  sharePageAccounts SharePageAccount[]
+
+  // Verification token tạm thời sau bước verify pass
+  verifications SharePassVerification[]
 }
+
+// ============================================================================
+// SHARE PASS
+// ============================================================================
+// Đây là "mật khẩu truy cập" của SharePage.
+//
+// User nhập pass này ở public page.
+//
+// Quan trọng:
+// - KHÔNG lưu plaintext
+// - Chỉ lưu passwordHash
+//
+// Một SharePage có thể có nhiều pass.
+// Mỗi pass được xem như 1 user hoặc 1 slot user riêng.
+// Quota được tính theo từng pass.
+// ============================================================================
 
 model SharePass {
   id          String    @id @default(cuid())
   sharePageId String
   sharePage   SharePage @relation(fields: [sharePageId], references: [id], onDelete: Cascade)
 
-  // Password không lưu plaintext; lưu hash
+  // Hash của pass, không lưu pass gốc để tăng bảo mật
   passwordHash String
 
-  // Metadata để admin dễ quản lý pass
-  label          String?
-  
-  // Quota theo pass (= theo user)
+  // Label nội bộ để admin dễ phân biệt
+  // Ví dụ:
+  // - User A
+  // - Slot 01
+  // - Customer Nguyen Van B
+  label String?
+
+  // --------------------------------------------------------------------------
+  // Quota
+  // quotaTotal = tổng số lượt được phép dùng
+  // quotaUsed  = số lượt đã dùng thực tế
+  //
+  // remainingQuota = quotaTotal - quotaUsed
+  //
+  // Theo flow mới:
+  // - verify pass: chưa tăng quotaUsed
+  // - reveal account: mới tăng quotaUsed
+  // --------------------------------------------------------------------------
   quotaTotal Int
   quotaUsed  Int @default(0)
 
-  // Trạng thái thu hồi (hết lượt thì revoke)
+  // Nếu pass bị thu hồi thì revokedAt có giá trị
   revokedAt DateTime?
-  reason    String? // "QUOTA_EXHAUSTED", "ADMIN_REVOKED", ...
 
-  // Tuỳ chọn: expire theo pass riêng (nếu cần)
+  // Lý do thu hồi
+  // Ví dụ:
+  // - QUOTA_EXHAUSTED
+  // - ADMIN_REVOKED
+  // - SECURITY_BLOCKED
+  reason String?
+
+  // Nếu muốn pass này có ngày hết hạn riêng thì dùng field này
   expiresAt DateTime?
 
-  // Theo dõi
+  // Thời điểm verify gần nhất
   lastVerifiedAt DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
 
+  // Thời điểm reveal thông tin account gần nhất
+  // Hữu ích để audit rõ hơn giữa verify và reveal
+  lastRevealedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Log gắn với pass này
   logs ShareAuthLog[]
+
+  // Verification token sinh ra từ pass này
+  verifications SharePassVerification[]
 
   @@index([sharePageId])
   @@index([revokedAt])
 }
+
+// ============================================================================
+// SHARE AUTH LOG
+// ============================================================================
+// Bảng log để audit toàn bộ hành động auth/reveal liên quan tới share page.
+//
+// Có thể log các action như:
+// - VERIFY_PASS
+// - REVEAL
+// - INVALID_PASS
+// - RATE_LIMIT_BLOCK
+// - QUOTA_BLOCK
+// - PASS_REVOKED
+// - LINK_EXPIRED
+//
+// Đây là bảng rất quan trọng nếu sau này cần debug hoặc kiểm tra abuse.
+// ============================================================================
 
 model ShareAuthLog {
   id          String    @id @default(cuid())
   sharePageId String
   sharePage   SharePage @relation(fields: [sharePageId], references: [id], onDelete: Cascade)
 
+  // Optional vì có những log không match được pass cụ thể
+  // Ví dụ INVALID_PASS
   sharePassId String?
   sharePass   SharePass? @relation(fields: [sharePassId], references: [id], onDelete: SetNull)
 
-  // VERIFY_PASS / REVEAL / API_CALL / RATE_LIMIT_BLOCK / QUOTA_BLOCK ...
-  action  String
+  // Tên hành động
+  action String
+
+  // Hành động thành công hay thất bại
   success Boolean
+
+  // Message mô tả ngắn
+  // Ví dụ:
+  // - "Invalid pass"
+  // - "Quota exhausted"
+  // - "Reveal success"
   message String?
 
+  // Thông tin request để audit
   ipAddress String?
   userAgent String?
 
@@ -132,4 +320,141 @@ model ShareAuthLog {
 
   @@index([sharePageId, createdAt])
   @@index([sharePassId, createdAt])
+}
+
+// ============================================================================
+// APP ACCOUNT
+// ============================================================================
+// Đây là bảng lưu account thật của App.
+//
+// Ví dụ với 1 app:
+// - email
+// - username
+// - password
+// - 2FA key
+// - backup code
+// - ghi chú
+//
+// Lưu ý:
+// Nếu dữ liệu nhạy cảm, về sau nên mã hóa trước khi lưu DB.
+// Hiện tại có thể để plain để làm MVP trước.
+// ============================================================================
+
+model AppAccount {
+  id    String @id @default(cuid())
+
+  // Account thuộc app nào
+  appId String
+  app   App    @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  // Tiêu đề nội bộ
+  // Ví dụ: "Account Premium 01"
+  title String?
+
+  // Dữ liệu đăng nhập / bảo mật
+  email      String?
+  username   String?
+  password   String?
+  twoFaKey   String?
+  backupCode String?
+
+  // Ghi chú nội bộ
+  note String?
+
+  // Có còn dùng được hay không
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Mapping sang các share page
+  sharePageAccounts SharePageAccount[]
+
+  @@index([appId])
+  @@index([isActive])
+}
+
+// ============================================================================
+// SHARE PAGE ACCOUNT
+// ============================================================================
+// Đây là bảng mapping giữa SharePage và AppAccount.
+//
+// Tại sao cần bảng này?
+// Vì 1 share page có thể reveal:
+// - 1 account
+// - nhiều account
+//
+// Và 1 account cũng có thể được gắn vào nhiều share page khác nhau nếu business cho phép.
+//
+// Bảng này giúp hệ thống linh hoạt hơn rất nhiều so với việc nhét appAccountId
+// trực tiếp vào SharePage.
+// ============================================================================
+
+model SharePageAccount {
+  id           String     @id @default(cuid())
+  sharePageId  String
+  appAccountId String
+
+  sharePage  SharePage  @relation(fields: [sharePageId], references: [id], onDelete: Cascade)
+  appAccount AppAccount @relation(fields: [appAccountId], references: [id], onDelete: Cascade)
+
+  // Dùng khi muốn sắp xếp account trong 1 share page
+  sortOrder Int @default(0)
+
+  // Có đang được phép reveal trong share page này không
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Không cho duplicate cùng 1 account trong cùng 1 share page
+  @@unique([sharePageId, appAccountId])
+
+  @@index([sharePageId])
+  @@index([appAccountId])
+}
+
+// ============================================================================
+// SHARE PASS VERIFICATION
+// ============================================================================
+// Bảng token tạm thời cho flow:
+//
+// 1. User nhập pass
+// 2. Server verify pass thành công
+// 3. Server sinh verification token ngắn hạn
+// 4. Client giữ token này
+// 5. Khi user bấm "Xem thông tin account", client gửi token lên
+// 6. Server kiểm tra token hợp lệ -> mới reveal account + consume quota
+//
+// Tại sao cần bảng này?
+// - Không phải gửi lại plain pass ở bước reveal
+// - Không phải lưu pass ở client quá lâu
+// - Tách rõ verify và reveal
+// - Token có thể hết hạn / chỉ dùng 1 lần
+// ============================================================================
+
+model SharePassVerification {
+  id    String @id @default(cuid())
+
+  // Token ngẫu nhiên, unique, sống ngắn hạn
+  token String @unique
+
+  sharePageId String
+  sharePassId String
+
+  sharePage SharePage @relation(fields: [sharePageId], references: [id], onDelete: Cascade)
+  sharePass SharePass @relation(fields: [sharePassId], references: [id], onDelete: Cascade)
+
+  // Token chỉ hợp lệ tới thời điểm này
+  expiresAt DateTime
+
+  // Khi reveal thành công thì set consumedAt để tránh reuse token
+  consumedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([sharePageId])
+  @@index([sharePassId])
+  @@index([expiresAt])
 }

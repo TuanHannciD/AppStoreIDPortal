@@ -4,9 +4,18 @@ export const SharePageFormSchema = z
   .object({
     appId: z.string().min(1, "App is required"),
     note: z.string().max(2000).optional(),
-    expiresAt: z.string().optional(), // ISO string or ""
-    code: z.string().max(64).optional(), // optional custom
+    expiresAt: z.string().optional(),
+    code: z.string().max(64).optional(),
+
+    // CHANGED:
+    // Đưa consumeOnVerify vào schema để form và payload đồng bộ hẳn.
+    // Flow mới mặc định sẽ là false:
+    // - false => verify không trừ quota
+    // - true  => verify trừ quota ngay
+    consumeOnVerify: z.boolean(),
+
     mode: z.enum(["single", "multiple"]),
+
     passes: z
       .array(
         z.object({
@@ -18,10 +27,11 @@ export const SharePageFormSchema = z
       .min(1, "At least 1 pass is required"),
   })
   .superRefine((val, ctx) => {
-    const seen = new Set(); // Lư pass đã gặp
+    const seen = new Set();
+
     for (let i = 0; i < val.passes.length; i++) {
-      //Duyệt từng pass.
-      const p = (val.passes[i].pass || "").trim(); //trim khoảng trắng.
+      const p = (val.passes[i].pass || "").trim();
+
       if (seen.has(p)) {
         ctx.addIssue({
           code: "custom",
@@ -29,6 +39,7 @@ export const SharePageFormSchema = z
           message: "Duplicate pass",
         });
       }
+
       seen.add(p);
     }
   });
@@ -39,6 +50,12 @@ export function defaultSharePageForm() {
     note: "",
     expiresAt: "",
     code: "",
+
+    // CHANGED:
+    // Flow mới mặc định:
+    // verify pass trước, chỉ trừ quota khi reveal account.
+    consumeOnVerify: false,
+
     mode: "single",
     passes: [{ pass: "", quota: 1, label: "" }],
   };

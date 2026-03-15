@@ -24,7 +24,7 @@ import {
   TableRow,
   TableCell,
 } from "@/components/ui/table";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 import { fetchSharePagePasses } from "../../api/sharePage.api";
 import { mapSharePassesToTableRows } from "../../lib/sharePass.table.mapper";
@@ -90,7 +90,7 @@ export default function SharePassManageModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="w-[95vw] max-w-6xl h-[90vh] p-0 overflow-hidden">
+        <DialogContent className="w-[95vw] !max-w-6xl h-[90vh] p-0 overflow-hidden">
           <DialogHeader className="px-4 pt-4 pb-2 sm:px-6 sm:pt-6">
             <DialogTitle>Manage Passes</DialogTitle>
             <DialogDescription>
@@ -140,51 +140,54 @@ export default function SharePassManageModal({
                 </div>
 
                 <div className="rounded-md border overflow-hidden">
-                  <ScrollArea className="h-[420px] w-full">
-                    <Table className="min-w-[700px] sm:min-w-[900px]">
-                      <TableHeader>
-                        {table.getHeaderGroups().map((headerGroup) => (
-                          <TableRow key={headerGroup.id}>
-                            {headerGroup.headers.map((header) => (
-                              <TableHead key={header.id}>
-                                {header.isPlaceholder
-                                  ? null
-                                  : flexRender(
-                                      header.column.columnDef.header,
-                                      header.getContext(),
-                                    )}
-                              </TableHead>
-                            ))}
-                          </TableRow>
-                        ))}
-                      </TableHeader>
-
-                      <TableBody>
-                        {table.getRowModel().rows.length ? (
-                          table.getRowModel().rows.map((row) => (
-                            <TableRow key={row.id}>
-                              {row.getVisibleCells().map((cell) => (
-                                <TableCell key={cell.id}>
-                                  {flexRender(
-                                    cell.column.columnDef.cell,
-                                    cell.getContext(),
-                                  )}
-                                </TableCell>
+                  <ScrollArea className="h-[320px] w-full">
+                    <div className="min-w-[900px] pb-2">
+                      <Table>
+                        <TableHeader>
+                          {table.getHeaderGroups().map((headerGroup) => (
+                            <TableRow key={headerGroup.id}>
+                              {headerGroup.headers.map((header) => (
+                                <TableHead key={header.id}>
+                                  {header.isPlaceholder
+                                    ? null
+                                    : flexRender(
+                                        header.column.columnDef.header,
+                                        header.getContext(),
+                                      )}
+                                </TableHead>
                               ))}
                             </TableRow>
-                          ))
-                        ) : (
-                          <TableRow>
-                            <TableCell
-                              colSpan={columns.length}
-                              className="h-24 text-center"
-                            >
-                              No passes found.
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
+                          ))}
+                        </TableHeader>
+
+                        <TableBody>
+                          {table.getRowModel().rows.length ? (
+                            table.getRowModel().rows.map((row) => (
+                              <TableRow key={row.id}>
+                                {row.getVisibleCells().map((cell) => (
+                                  <TableCell key={cell.id}>
+                                    {flexRender(
+                                      cell.column.columnDef.cell,
+                                      cell.getContext(),
+                                    )}
+                                  </TableCell>
+                                ))}
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell
+                                colSpan={columns.length}
+                                className="h-24 text-center"
+                              >
+                                No passes found.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <ScrollBar orientation="horizontal" />
                   </ScrollArea>
                 </div>
               </div>
