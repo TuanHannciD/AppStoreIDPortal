@@ -1,17 +1,20 @@
-// full create screen
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchApps, createSharePage } from "../api/sharePage.api";
+import {
+  fetchApps,
+  fetchAppAccounts,
+  createSharePage,
+} from "../api/sharePage.api";
 import PassRowsEditor from "./PassRowsEditor";
 import SharePageResultCard from "./SharePageResultCard";
+import SharePageAccountTable from "./SharePageAccountTable";
 import {
   SharePageFormSchema,
   defaultSharePageForm,
 } from "../../share-public/components/sharePage.schema";
 import { mapFormToCreatePayload } from "../lib/sharePage.mapper";
 import { Calendar } from "@/components/ui/calendar";
-import { Button } from "@/components/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -27,15 +30,20 @@ export default function SharePageForm() {
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-
   const [created, setCreated] = useState(null);
   const [enableExpire, setEnableExpire] = useState(false);
 
-  // CHANGED:
-  // Flow mới là:
-  // - Verify pass -> chưa trừ quota
-  // - Reveal account info -> mới trừ quota
+  /**
+   * State mới cho account assignment
+   */
+  const [availableAccounts, setAvailableAccounts] = useState([]);
+  const [selectedAccountIds, setSelectedAccountIds] = useState([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [accountKeyword, setAccountKeyword] = useState("");
 
+  /**
+   * Load apps khi vào màn hình create.
+   */
   useEffect(() => {
     (async () => {
       setLoadingApps(true);
@@ -45,35 +53,107 @@ export default function SharePageForm() {
     })();
   }, []);
 
-  const canSubmit = useMemo(
-    () => !submitting && !loadingApps,
-    [submitting, loadingApps],
-  );
+  /**
+   * Khi appId đổi:
+   * - reset account selection cũ
+   * - load lại AppAccount của app mới
+   *
+   * Lý do:
+   * account pool luôn phụ thuộc vào app đang chọn.
+   */
+  useEffect(() => {
+    if (!form.appId) {
+      setAvailableAccounts([]);
+      setSelectedAccountIds([]);
+      setAccountKeyword("");
+      return;
+    }
+
+    (async () => {
+      setLoadingAccounts(true);
+      setSelectedAccountIds([]);
+      setAccountKeyword("");
+
+      try {
+        const data = await fetchAppAccounts(form.appId);
+        setAvailableAccounts(data?.accounts || []);
+      } catch (_err) {
+        setAvailableAccounts([]);
+      } finally {
+        setLoadingAccounts(false);
+      }
+    })();
+  }, [form.appId]);
+
+  /**
+   * Nếu người dùng chuyển từ multiple -> single
+   * thì chỉ giữ lại pass đầu tiên.
+   */
+  useEffect(() => {
+    if (form.mode === "single" && form.passes.length > 1) {
+      setForm((s) => ({
+        ...s,
+        passes: [s.passes[0]],
+      }));
+    }
+  }, [form.mode, form.passes.length]);
+
+  const canSubmit = useMemo(() => {
+    return !submitting && !loadingApps;
+  }, [submitting, loadingApps]);
+
+  const selectedDate = form.expiresAt ? new Date(form.expiresAt) : undefined;
 
   function setField(name, value) {
-    setForm((s) => ({ ...s, [name]: value }));
+    setForm((s) => ({
+      ...s,
+      [name]: value,
+    }));
   }
 
   function setPasses(passes) {
-    setForm((s) => ({ ...s, passes }));
+    setForm((s) => ({
+      ...s,
+      passes,
+    }));
   }
 
+  /**
+   * Validate form theo schema cũ trước.
+   * Sau đó bổ sung business validation riêng cho accountIds.
+   */
   function validate(current) {
     const parsed = SharePageFormSchema.safeParse(current);
-    if (parsed.success) {
-      setErrors({});
-      return { ok: true, data: parsed.data };
+
+    if (!parsed.success) {
+      const flat = parsed.error.flatten();
+      setErrors({
+        form: flat.formErrors?.[0] || "",
+        fields: flat.fieldErrors || {},
+      });
+      return { ok: false };
     }
-    const flat = parsed.error.flatten();
-    setErrors({
-      form: flat.formErrors?.[0] || "",
-      fields: flat.fieldErrors || {},
-    });
-    return { ok: false };
+
+    /**
+     * Business rule:
+     * Vì flow hiện tại là verify -> reveal account,
+     * nên SharePage nên có ít nhất 1 account được gắn.
+     */
+    if (selectedAccountIds.length === 0) {
+      setErrors({
+        form: "Please assign at least one account for this share page.",
+        fields: {},
+      });
+      return { ok: false };
+    }
+
+    setErrors({});
+    return { ok: true, data: parsed.data };
   }
 
   async function onSubmit(e) {
     e.preventDefault();
+
     setServerError("");
     setCreated(null);
 
@@ -81,15 +161,25 @@ export default function SharePageForm() {
     if (!v.ok) return;
 
     setSubmitting(true);
+
     try {
-      // CHANGED:
-      const payload = mapFormToCreatePayload(form);
+      /**
+       * map payload cũ + bổ sung accountIds
+       *
+       * accountIds sẽ dùng để tạo SharePageAccount ở backend.
+       */
+      const payload = {
+        ...mapFormToCreatePayload(form),
+        accountIds: selectedAccountIds,
+      };
 
       const res = await createSharePage(payload);
+
       if (!res?.success) {
         setServerError(res?.message || "Create failed");
         return;
       }
+
       setCreated(res);
     } catch (err) {
       setServerError(String(err?.message || err));
@@ -111,28 +201,15 @@ export default function SharePageForm() {
     });
   }
 
-  // Nếu người dùng chuyển từ multiple -> single
-  // thì chỉ giữ lại pass đầu tiên
-  useEffect(() => {
-    if (form.mode === "single" && form.passes.length > 1) {
-      setForm((s) => ({ ...s, passes: [s.passes[0]] }));
-    }
-  }, [form.mode]);
-
-  const selectedDate = form.expiresAt ? new Date(form.expiresAt) : undefined;
-
   return (
-    <div className="space-y-6">
-      {created && <SharePageResultCard result={created} passes={form.passes} />}
+    <div className="max-w-5xl mx-auto p-6 space-y-6">
+      {created && <SharePageResultCard result={created} />}
 
       <form onSubmit={onSubmit} className="space-y-6">
         {/* Share info */}
         <div className="rounded-2xl border border-neutral-800 p-4 space-y-4">
           <div>
             <div className="text-sm font-semibold">Share link info</div>
-
-            {/* CHANGED:
-                Thêm mô tả ngắn đúng business mới để sau này đọc lại dễ hiểu */}
             <div className="text-xs text-neutral-400 mt-1">
               Cấu hình thông tin cơ bản của share link, thời hạn sử dụng và mã
               public trên URL.
@@ -164,38 +241,28 @@ export default function SharePageForm() {
               )}
             </div>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-neutral-400">Expiration</div>
-
+            <div className="space-y-1">
+              <div className="text-xs text-neutral-400">Expiration</div>
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={toggleExpire}
-                  className={`px-3 py-1 text-xs rounded-lg border ${
-                    enableExpire
-                      ? "border-neutral-500 bg-neutral-400"
-                      : "border-neutral-400"
-                  }`}
+                  className="px-3 py-2 text-sm rounded-xl border border-neutral-800 hover:bg-[rgb(124,124,124)]"
                 >
                   {enableExpire ? "Enabled" : "Disabled"}
                 </button>
-              </div>
 
-              {enableExpire && (
-                <div className="rounded-xl border border-neutral-800 p-2 w-fit">
+                {enableExpire && (
                   <Popover>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        data-empty={!selectedDate}
-                        className="w-[212px] justify-between text-left font-normal data-[empty=true]:text-muted-foreground"
+                      <button
+                        type="button"
+                        className="px-3 py-2 text-sm rounded-xl border border-neutral-800 hover:bg-[rgb(124,124,124)]"
                       >
-                        {selectedDate ? (
-                          format(selectedDate, "PPP")
-                        ) : (
-                          <span>Pick a date</span>
-                        )}
-                      </Button>
+                        {selectedDate
+                          ? format(selectedDate, "PPP")
+                          : "Pick a date"}
+                      </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
@@ -207,8 +274,8 @@ export default function SharePageForm() {
                       />
                     </PopoverContent>
                   </Popover>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             <div className="space-y-1 md:col-span-2">
@@ -236,10 +303,7 @@ export default function SharePageForm() {
           </div>
         </div>
 
-        {/* CHANGED:
-            Thêm block Access behavior để phản ánh flow mới.
-            Đây là thay đổi quan trọng nhất ở màn create.
-        */}
+        {/* Access behavior */}
         <div className="rounded-2xl border border-neutral-800 p-4 space-y-3">
           <div>
             <div className="text-sm font-semibold">Access behavior</div>
@@ -289,49 +353,12 @@ export default function SharePageForm() {
             </label>
           </div>
         </div>
-        {/* CHANGED:
-            Thêm placeholder block cho account mapping.
-            Vì flow mới phụ thuộc vào account reveal, nên nếu không có block này
-            thì UI create sẽ thiếu ngữ cảnh business.
-        */}
-        <div className="rounded-2xl border border-neutral-800 p-4 space-y-3">
-          <div>
-            <div className="text-sm font-semibold">
-              Shared account configuration
-            </div>
-            <div className="text-xs text-neutral-400 mt-1">
-              Chọn account sẽ được trả về sau khi user verify pass và bấm xem
-              thông tin account.
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-dashed border-neutral-700 p-4">
-            <div className="text-sm font-medium">
-              Account assignment placeholder
-            </div>
-            <div className="text-xs text-neutral-400 mt-2 leading-5">
-              Phần này nên được nối với các bảng như{" "}
-              <span className="font-mono">AppAccount</span> và{" "}
-              <span className="font-mono">SharePageAccount</span>.
-              <br />
-              Hiện tại bạn chưa build xong module account nên mới để placeholder
-              để tránh UI bị lệch với flow mới.
-            </div>
-
-            <div className="mt-3 text-xs text-amber-400">
-              Chưa có account nào được gắn vào share link này.
-            </div>
-          </div>
-        </div>
 
         {/* Pass mode */}
         <div className="rounded-2xl border border-neutral-800 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold">Pass mode</div>
-
-              {/* CHANGED:
-                  Sửa wording để dễ hiểu hơn và đỡ lặp chữ "link" */}
               <div className="text-xs text-neutral-400">
                 Single pass dành cho một người dùng; multiple passes dành cho
                 nhiều người dùng trên cùng một share link.
@@ -344,19 +371,20 @@ export default function SharePageForm() {
                 onClick={() => setField("mode", "single")}
                 className={`px-3 py-2 text-sm rounded-xl border ${
                   form.mode === "single"
-                    ? "border-neutral-500 bg-neutral-400"
-                    : "border-neutral-800 hover:bg-neutral-400"
+                    ? "border-neutral-500 bg-[rgb(202,202,202)]"
+                    : "border-neutral-800 hover:bg-[rgb(124,124,124)]"
                 }`}
               >
                 Single
               </button>
+
               <button
                 type="button"
                 onClick={() => setField("mode", "multiple")}
                 className={`px-3 py-2 text-sm rounded-xl border ${
                   form.mode === "multiple"
-                    ? "border-neutral-500 bg-neutral-400"
-                    : "border-neutral-800 hover:bg-neutral-400"
+                    ? "border-neutral-500 bg-[rgb(202,202,202)]"
+                    : "border-neutral-800 hover:bg-[rgb(124,124,124)]"
                 }`}
               >
                 Multiple
@@ -365,28 +393,32 @@ export default function SharePageForm() {
           </div>
         </div>
 
-        {/* CHANGED:
-            Giữ PassRowsEditor, nhưng logic mô tả quota phải theo flow mới.
-            Nếu component này có title/subtitle hardcode bên trong, bạn nên sửa luôn ở file đó.
-        */}
         <PassRowsEditor
           mode={form.mode}
           passes={form.passes}
           onChange={setPasses}
         />
 
-        {/* CHANGED:
-            Thêm helper text ngoài editor để làm rõ quota semantics
-            trong trường hợp PassRowsEditor chưa sửa subtitle bên trong */}
         <div className="text-xs text-neutral-400 -mt-3">
           Mỗi pass tương ứng một người dùng hoặc một slot sử dụng. Quota chỉ bị
           trừ khi người dùng bấm xem thông tin account thành công, không trừ ở
           bước verify pass.
         </div>
 
+        {/* Account assignment */}
+        <SharePageAccountTable
+          accounts={availableAccounts}
+          selectedIds={selectedAccountIds}
+          onChangeSelectedIds={setSelectedAccountIds}
+          loading={loadingAccounts}
+          keyword={accountKeyword}
+          onKeywordChange={setAccountKeyword}
+        />
+
         {errors?.fields?.passes?.[0] && (
           <div className="text-xs text-red-300">{errors.fields.passes[0]}</div>
         )}
+
         {errors?.form && (
           <div className="text-xs text-red-300">{errors.form}</div>
         )}
@@ -400,10 +432,11 @@ export default function SharePageForm() {
         <div className="flex items-center justify-end gap-2">
           <a
             href="/admin/share-pages"
-            className="px-4 py-2 text-sm rounded-xl border border-neutral-800 hover:bg-neutral-400"
+            className="px-4 py-2 text-sm rounded-xl border border-neutral-800 hover:bg-[rgb(124,124,124)]"
           >
             Cancel
           </a>
+
           <button
             type="submit"
             disabled={!canSubmit}

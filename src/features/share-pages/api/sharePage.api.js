@@ -1,5 +1,26 @@
+/**
+ * API client dùng ở feature share-pages.
+ * Tách riêng ra để form/component không phải viết fetch trực tiếp.
+ */
 export async function fetchApps() {
   const res = await fetch("/api/apps", { cache: "no-store" });
+  return res.json();
+}
+
+/**
+ * Lấy danh sách account theo app.
+ * Dùng khi admin chọn app trong SharePageForm.
+ */
+export async function fetchAppAccounts(appId) {
+  if (!appId) {
+    return { success: true, accounts: [] };
+  }
+
+  const res = await fetch(`/api/apps/by-id/${appId}/accounts`, {
+    method: "GET",
+    cache: "no-store",
+  });
+
   return res.json();
 }
 

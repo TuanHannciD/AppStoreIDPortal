@@ -56,7 +56,9 @@ export default function ShareRevealCard({
 
       {!isRevealed && (
         <div className="rounded-xl border border-dashed border-neutral-700 p-4 space-y-3">
-          <div className="text-sm font-medium">Account information is hidden</div>
+          <div className="text-sm font-medium">
+            Account information is hidden
+          </div>
           <div className="text-sm text-neutral-400">
             Click the button below to reveal full account information. Quota
             will be consumed at that time.
@@ -141,7 +143,7 @@ function FieldRow({ label, value, onCopy }) {
         <button
           type="button"
           onClick={onCopy}
-          className="px-3 py-1 text-xs rounded-lg border border-neutral-700 hover:bg-neutral-800"
+          className="px-3 py-1 text-xs rounded-lg border border-neutral-700 hover:bg-[rgb(202,202,202)]"
         >
           Copy
         </button>

@@ -31,6 +31,11 @@ const CreateSharePageSchema = z.object({
       }),
     )
     .min(1),
+  /**
+   * Field mới:
+   * Danh sách account được gắn vào SharePage.
+   */
+  accountIds: z.array(z.string().min(1)).min(1),
 });
 
 export async function GET() {
@@ -95,8 +100,30 @@ export async function POST(req) {
       code,
       consumeOnVerify, // CHANGED
       passes,
+      accountIds,
     } = parsed.data;
+    /**
+     * Validate:
+     * Tất cả accountIds phải thuộc đúng appId.
+     * Tránh bug gắn account app khác vào share page hiện tại.
+     */
+    const validAccounts = await prisma.appAccount.findMany({
+      where: {
+        appId,
+        id: { in: accountIds },
+      },
+      select: { id: true },
+    });
 
+    if (validAccounts.length !== accountIds.length) {
+      return Response.json(
+        {
+          success: false,
+          message: "One or more accounts do not belong to the selected app.",
+        },
+        { status: 400 },
+      );
+    }
     let finalCode = (code && code.trim()) || genCode(8);
 
     for (let i = 0; i < 5; i++) {
@@ -121,28 +148,35 @@ export async function POST(req) {
         },
       });
 
-      const passRows = await Promise.all(
-        passes.map(async (p) => {
-          const passHash = await bcrypt.hash(p.pass, 10);
-          return {
+      /**
+       * Tạo SharePass từ danh sách pass admin nhập.
+       * Ở đây đang hash pass trước khi lưu.
+       */
+      for (const item of passes) {
+        const passwordHash = await bcrypt.hash(item.pass, 10);
+
+        await tx.sharePass.create({
+          data: {
             sharePageId: created.id,
-
-            // CHANGED:
-            // Đổi key theo schema hiện tại của bạn:
-            // passwordHash thay vì passHash
-            passwordHash: passHash,
-
-            label: p.label ?? null,
-
-            // CHANGED:
-            // Schema hiện tại dùng quotaTotal + quotaUsed
-            quotaTotal: p.quota,
+            passwordHash,
+            label: item.label ?? null,
+            quotaTotal: item.quota,
             quotaUsed: 0,
-          };
-        }),
-      );
+          },
+        });
+      }
 
-      await tx.sharePass.createMany({ data: passRows });
+      /**
+       * Tạo mapping SharePageAccount.
+       * Đây là pool account mà bước reveal sẽ dùng.
+       */
+      await tx.sharePageAccount.createMany({
+        data: accountIds.map((appAccountId) => ({
+          sharePageId: created.id,
+          appAccountId,
+        })),
+        skipDuplicates: true,
+      });
 
       return created;
     });

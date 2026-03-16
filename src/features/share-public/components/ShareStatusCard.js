@@ -6,7 +6,11 @@
  * - expired
  * - error
  */
-export default function ShareStatusCard({ title, message, status = "default" }) {
+export default function ShareStatusCard({
+  title,
+  message,
+  status = "default",
+}) {
   const colorClass =
     status === "error"
       ? "border-red-900/60 bg-red-950/20 text-red-200"
