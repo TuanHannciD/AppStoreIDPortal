@@ -1,5 +1,17 @@
 "use client";
 
+/**
+ * File này định nghĩa các cột cho bảng pass trong modal Manage Passes.
+ *
+ * Mục tiêu của file:
+ * - giữ phần "cấu hình table" tách khỏi màn container
+ * - giúp SharePassManageModal không bị quá dài
+ * - gom logic render cell vào một nơi
+ *
+ * File này KHÔNG tự quản lý state lớn.
+ * Nó chỉ nhận `actions` từ component cha và gọi callback khi user bấm menu.
+ */
+
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +41,31 @@ function showToastFallback(message) {
   }
 }
 
-export function getPassColumns() {
+function getStatusTone(status) {
+  if (status === "ACTIVE") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+  if (status === "REVOKED") return "bg-rose-50 text-rose-700 border-rose-200";
+  if (status === "EXPIRED") return "bg-amber-50 text-amber-700 border-amber-200";
+  if (status === "EXHAUSTED") return "bg-slate-100 text-slate-700 border-slate-200";
+  return "bg-slate-50 text-slate-700 border-slate-200";
+}
+
+export function getPassColumns(actions = {}) {
+  /**
+   * `actions`
+   * Là object callback do component cha truyền xuống.
+   *
+   * Ví dụ:
+   * - actions.onView(item)
+   * - actions.onEdit(item)
+   * - actions.onResetUsage(item)
+   * - actions.onRevoke(item)
+   * - actions.onRestore(item)
+   * - actions.onRotate(item)
+   *
+   * Tác dụng của pattern này:
+   * - file cột không cần biết modal được mở như thế nào
+   * - component cha vẫn nắm quyền điều phối flow
+   */
   return [
     {
       accessorKey: "label",
@@ -48,21 +84,21 @@ export function getPassColumns() {
       accessorKey: "quotaRemaining",
       header: "Quota Remaining",
     },
-    // {
-    //   accessorKey: "isActive",
-    //   header: "Active",
-    //   cell: ({ row }) =>
-    //     row.getValue("isActive") ? (
-    //       <span className="text-emerald-600">Active</span>
-    //     ) : (
-    //       <span className="text-red-500">Inactive</span>
-    //     ),
-    // },
-    // {
-    //   accessorKey: "lastUsedAt",
-    //   header: "Last Used At",
-    //   cell: ({ row }) => fmtDate(row.getValue("lastUsedAt")),
-    // },
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const status = row.getValue("status") || "UNKNOWN";
+
+        return (
+          <span
+            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getStatusTone(status)}`}
+          >
+            {status}
+          </span>
+        );
+      },
+    },
     {
       accessorKey: "createdAt",
       header: "Created At",
@@ -86,32 +122,42 @@ export function getPassColumns() {
               <DropdownMenuSeparator />
 
               <DropdownMenuItem
-                onClick={() =>
-                  showToastFallback(`View pass ${item.id} is not implemented yet`)
-                }
+                onClick={() => actions?.onView?.(item)}
               >
                 View
               </DropdownMenuItem>
 
               <DropdownMenuItem
-                onClick={() =>
-                  showToastFallback(`Reset quota for ${item.id} is not implemented yet`)
-                }
+                onClick={() => actions?.onEdit?.(item)}
               >
-                Reset Quota
+                Edit
               </DropdownMenuItem>
 
               <DropdownMenuItem
-                onClick={() =>
-                  showToastFallback(`Disable pass ${item.id} is not implemented yet`)
-                }
+                onClick={() => actions?.onResetUsage?.(item)}
               >
-                Disable
+                Reset Usage
               </DropdownMenuItem>
 
               <DropdownMenuItem
+                onClick={() => actions?.onRotate?.(item)}
+              >
+                Rotate Pass
+              </DropdownMenuItem>
+
+              {item.status === "REVOKED" ? (
+                <DropdownMenuItem onClick={() => actions?.onRestore?.(item)}>
+                  Restore
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onClick={() => actions?.onRevoke?.(item)}>
+                  Revoke
+                </DropdownMenuItem>
+              )}
+
+              <DropdownMenuItem
                 onClick={() =>
-                  showToastFallback(`Delete pass ${item.id} is not implemented yet`)
+                  showToastFallback(`Delete pass ${item.id} is intentionally deferred to keep audit history safe`)
                 }
                 className="text-red-500"
               >

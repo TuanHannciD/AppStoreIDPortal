@@ -1,6 +1,23 @@
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import {
+  getRemainingQuota,
+  isSharePassExpired,
+  isSharePassRevoked,
+} from "@/lib/share-public";
+import { getSharePassStatus } from "@/features/share-pages/lib/pass-status";
+
+/**
+ * File API này xử lý danh sách pass của một share page.
+ *
+ * Vai trò:
+ * - `GET`: trả danh sách pass để admin hiển thị trong Manage Passes
+ * - `POST`: tạo pass mới cho share page
+ *
+ * Đây là route ở tầng "admin management", khác với các route public
+ * `verify` / `reveal` dùng cho người dùng cuối.
+ */
 
 const CreatePassSchema = z.object({
   pass: z.string().min(1).max(128),
@@ -8,7 +25,31 @@ const CreatePassSchema = z.object({
   label: z.string().max(120).optional().nullable(),
 });
 
+/**
+ * Convert raw SharePass row thành shape dễ dùng ở bảng admin.
+ * Mình giữ mapping này ở server để client không phải tự đoán status.
+ */
+function mapPassItem(pass) {
+  return {
+    ...pass,
+    quotaRemaining: getRemainingQuota(pass),
+    isRevoked: isSharePassRevoked(pass),
+    isExpired: isSharePassExpired(pass),
+    status: getSharePassStatus(pass),
+  };
+}
+
 export async function GET(_req, { params }) {
+  /**
+   * Lấy toàn bộ pass của một share page để render ở admin.
+   *
+   * Ở đây server trả luôn:
+   * - quotaRemaining
+   * - status
+   * - revoked/expired flags
+   *
+   * để client chỉ việc hiển thị.
+   */
   try {
     const sharePage = await prisma.sharePage.findUnique({
       where: { id: params.id },
@@ -38,8 +79,11 @@ export async function GET(_req, { params }) {
         label: true,
         quotaTotal: true,
         quotaUsed: true,
-        // isActive: true, trong db không có
-        //lastUsedAt: true, trong db không có
+        revokedAt: true,
+        reason: true,
+        expiresAt: true,
+        lastVerifiedAt: true,
+        lastRevealedAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -47,11 +91,6 @@ export async function GET(_req, { params }) {
         createdAt: "desc",
       },
     });
-
-    const items = passes.map((pass) => ({
-      ...pass,
-      quotaRemaining: Math.max(0, pass.quotaTotal - (pass.quotaUsed ?? 0)),
-    }));
 
     return Response.json({
       success: true,
@@ -62,7 +101,7 @@ export async function GET(_req, { params }) {
         expiresAt: sharePage.expiresAt,
         app: sharePage.app,
       },
-      items,
+      items: passes.map(mapPassItem),
     });
   } catch (err) {
     return Response.json(
@@ -77,6 +116,20 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(req, { params }) {
+  /**
+   * Tạo một pass mới.
+   *
+   * Flow:
+   * 1. validate payload
+   * 2. kiểm tra share page có tồn tại không
+   * 3. hash plaintext pass
+   * 4. lưu DB
+   * 5. trả item đã được map sẵn cho UI
+   *
+   * Lưu ý:
+   * - không lưu plaintext pass vào DB
+   * - chỉ lưu `passwordHash`
+   */
   try {
     const body = await req.json();
     const parsed = CreatePassSchema.safeParse(body);
@@ -112,16 +165,17 @@ export async function POST(req, { params }) {
         passwordHash: passHash,
         label: parsed.data.label ?? null,
         quotaTotal: parsed.data.quota,
-        //       quotaRemaining: parsed.data.quota,
-        //isActive: true,
       },
       select: {
         id: true,
         label: true,
         quotaTotal: true,
-        // quotaRemaining: true,
-        // isActive: true,
-        // lastUsedAt: true,
+        quotaUsed: true,
+        revokedAt: true,
+        reason: true,
+        expiresAt: true,
+        lastVerifiedAt: true,
+        lastRevealedAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -129,7 +183,7 @@ export async function POST(req, { params }) {
 
     return Response.json({
       success: true,
-      item: created,
+      item: mapPassItem(created),
     });
   } catch (err) {
     return Response.json(

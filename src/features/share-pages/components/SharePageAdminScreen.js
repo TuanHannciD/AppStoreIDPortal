@@ -86,7 +86,7 @@ export default function SharePageAdminScreen() {
 
   return (
     <>
-      <div className="space-y-6">
+      <div className="flex h-full min-h-0 flex-col gap-6">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Share Links</h1>
           <p className="text-sm text-muted-foreground">
@@ -107,7 +107,9 @@ export default function SharePageAdminScreen() {
         )}
 
         {!loading && !error && (
-          <SharePageDataTable columns={columns} data={rows} />
+          <div className="min-h-0 flex-1">
+            <SharePageDataTable columns={columns} data={rows} />
+          </div>
         )}
       </div>
 

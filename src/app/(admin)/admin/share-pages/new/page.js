@@ -1,19 +1,22 @@
 import SharePageForm from "@/features/share-pages/components/SharePageForm";
 
-//Đây là page component trong Next.js dùng để hiển thị trang tạo share link mới. Nó chủ yếu làm nhiệm vụ render layout và nhúng SharePageForm
+/**
+ * Trang tạo share link mới trong khu admin.
+ *
+ * Trang này giờ được bọc bởi `admin/layout.js`,
+ * nên không cần tự dựng outer container toàn màn hình nữa.
+ */
 export default function SharePageNewPage() {
   return (
-    <div className="min-h-screen">
-      <div className="max-w-4xl mx-auto px-6 py-10 space-y-6">
-        <div>
-          <div className="text-xl font-semibold">Create share link</div>
-          <div className="text-sm text-neutral-400">
-            Tạo trang chia sẻ với quota và mật khẩu.
-          </div>
+    <div className="space-y-6">
+      <div>
+        <div className="text-xl font-semibold">Create share link</div>
+        <div className="text-sm text-neutral-400">
+          Tao trang chia se voi quota va mat khau.
         </div>
-
-        <SharePageForm />
       </div>
+
+      <SharePageForm />
     </div>
   );
 }
