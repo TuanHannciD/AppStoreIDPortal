@@ -1,10 +1,12 @@
-import crypto from "node:crypto";
+import crypto from "crypto";
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
-
-function sha256(text) {
-  return crypto.createHash("sha256").update(text).digest("hex");
-}
+import { isAdminRole, normalizeEmail, sha256 } from "@/lib/admin-auth";
+import {
+  createAdminAccessToken,
+  JWT_EXPIRES_IN_SEC,
+  SESSION_COOKIE_NAME,
+} from "@/lib/admin-session";
 
 function safeEqual(a, b) {
   if (!a || !b || a.length !== b.length) return false;
@@ -14,9 +16,7 @@ function safeEqual(a, b) {
 export async function POST(req) {
   try {
     const body = await req.json();
-    const email = String(body?.email || "")
-      .trim()
-      .toLowerCase();
+    const email = normalizeEmail(body?.email);
     const password = String(body?.password || "");
 
     if (!email || !password) {
@@ -46,14 +46,27 @@ export async function POST(req) {
       );
     }
 
+    if (!isAdminRole(user.role)) {
+      return NextResponse.json(
+        { ok: false, message: "This portal is available for admin accounts only." },
+        { status: 403 },
+      );
+    }
+
+    const accessToken = await createAdminAccessToken({
+      id: user.id,
+      email,
+      role: user.role,
+    });
+
     const res = NextResponse.json({ ok: true, role: user.role });
     res.cookies.set({
-      name: "session_user",
-      value: user.id,
+      name: SESSION_COOKIE_NAME,
+      value: accessToken,
       httpOnly: true,
       sameSite: "lax",
       path: "/",
-      maxAge: 60 * 60 * 8,
+      maxAge: JWT_EXPIRES_IN_SEC,
       secure: process.env.NODE_ENV === "production",
     });
     return res;

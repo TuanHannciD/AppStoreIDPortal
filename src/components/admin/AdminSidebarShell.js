@@ -1,36 +1,41 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { usePathname } from "next/navigation";
-import { LayoutDashboard, Link2, KeyRound, Menu, Plus, X } from "lucide-react";
-
-/**
- * Sidebar dùng chung cho toàn bộ khu vực `/admin`.
- *
- * Mục tiêu:
- * - desktop: sidebar cố định bên trái
- * - mobile: có nút mở/đóng để tiết kiệm diện tích
- * - tất cả route admin dùng chung một khung điều hướng
- */
+import { usePathname, useRouter } from "next/navigation";
+import {
+  KeyRound,
+  LayoutDashboard,
+  Link2,
+  LogOut,
+  Menu,
+  Plus,
+  X,
+} from "lucide-react";
 
 const NAV_ITEMS = [
   {
+    href: "/admin",
+    label: "Tong quan",
+    description: "Man hinh chao mung va huong dan nhanh",
+    icon: LayoutDashboard,
+  },
+  {
     href: "/admin/share-pages",
     label: "Share Links",
-    description: "Manage share pages and pass flows",
+    description: "Quan ly share page va luong pass",
     icon: Link2,
   },
   {
     href: "/admin/share-pages/new",
-    label: "Create Share Link",
-    description: "Create a new share page",
+    label: "Tao Share Link",
+    description: "Tao moi mot trang chia se",
     icon: Plus,
   },
   {
     href: "/admin/accounts",
     label: "App Accounts",
-    description: "CRUD the real accounts under each app",
+    description: "Quan ly cac tai khoan that cua app",
     icon: KeyRound,
   },
 ];
@@ -83,22 +88,13 @@ function NavLink({ item, pathname, onNavigate }) {
 
 export default function AdminSidebarShell({ children }) {
   const pathname = usePathname();
-
-  /**
-   * State điều khiển sidebar mobile có đang mở hay không.
-   */
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  /**
-   * Xác định tên trang hiện tại để hiện ở header mobile.
-   */
   const currentPage = useMemo(() => {
     return NAV_ITEMS.find((item) => isItemActive(pathname, item.href))?.label || "Admin";
   }, [pathname]);
 
-  /**
-   * Khi route đổi, tự đóng sidebar mobile để nội dung mới hiện ra ngay.
-   */
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
@@ -109,6 +105,16 @@ export default function AdminSidebarShell({ children }) {
 
   function toggleMobileSidebar() {
     setMobileOpen((prev) => !prev);
+  }
+
+  async function handleLogout() {
+    try {
+      await fetch("/api/logout", { method: "POST" });
+    } finally {
+      setMobileOpen(false);
+      router.push("/login");
+      router.refresh();
+    }
   }
 
   return (
@@ -124,7 +130,7 @@ export default function AdminSidebarShell({ children }) {
                 <div>
                   <div className="text-sm font-semibold text-slate-900">Admin Console</div>
                   <div className="text-xs text-slate-500">
-                    Navigate across management tools
+                    Dieu huong nhanh giua cac cong cu quan tri
                   </div>
                 </div>
               </div>
@@ -135,6 +141,17 @@ export default function AdminSidebarShell({ children }) {
                 <NavLink key={item.href} item={item} pathname={pathname} />
               ))}
             </nav>
+
+            <div className="border-t border-slate-200 p-4">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50"
+              >
+                <LogOut className="h-4 w-4" />
+                Dang xuat
+              </button>
+            </div>
           </div>
         </aside>
 
@@ -154,7 +171,7 @@ export default function AdminSidebarShell({ children }) {
                 type="button"
                 onClick={toggleMobileSidebar}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-900"
-                aria-label={mobileOpen ? "Close navigation" : "Open navigation"}
+                aria-label={mobileOpen ? "Dong dieu huong" : "Mo dieu huong"}
                 aria-expanded={mobileOpen}
               >
                 {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -166,7 +183,7 @@ export default function AdminSidebarShell({ children }) {
             <div className="fixed inset-0 z-40 lg:hidden">
               <button
                 type="button"
-                aria-label="Close sidebar overlay"
+                aria-label="Dong lop phu dieu huong"
                 className="absolute inset-0 bg-slate-950/40"
                 onClick={closeMobileSidebar}
               />
@@ -176,13 +193,13 @@ export default function AdminSidebarShell({ children }) {
                   <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
                     <div>
                       <div className="text-sm font-semibold text-slate-900">Admin Console</div>
-                      <div className="text-xs text-slate-500">Navigation</div>
+                      <div className="text-xs text-slate-500">Dieu huong</div>
                     </div>
                     <button
                       type="button"
                       onClick={closeMobileSidebar}
                       className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-900"
-                      aria-label="Close sidebar"
+                      aria-label="Dong sidebar"
                     >
                       <X className="h-5 w-5" />
                     </button>
@@ -198,6 +215,17 @@ export default function AdminSidebarShell({ children }) {
                       />
                     ))}
                   </nav>
+
+                  <div className="border-t border-slate-200 p-4">
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Dang xuat
+                    </button>
+                  </div>
                 </div>
               </aside>
             </div>
@@ -211,4 +239,3 @@ export default function AdminSidebarShell({ children }) {
     </div>
   );
 }
-

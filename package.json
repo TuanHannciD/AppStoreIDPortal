@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "render:admin-account": "node scripts/render-admin-account.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.4.2",
