@@ -77,7 +77,7 @@ export default function SharePageForm() {
       try {
         const data = await fetchAppAccounts(form.appId);
         setAvailableAccounts(data?.accounts || []);
-      } catch (_err) {
+      } catch {
         setAvailableAccounts([]);
       } finally {
         setLoadingAccounts(false);
