@@ -8,6 +8,7 @@ import SharePageDataTable from "./SharePageDataTable";
 import SharePageDetailModal from "./modals/SharePageDetailModal";
 import SharePassManageModal from "./modals/SharePassManageModal";
 import SharePageEditModal from "./modals/SharePageEditModal";
+import PageHeader from "@/components/PageHeader";
 
 function showToastFallback(message) {
   if (typeof window !== "undefined") {
@@ -86,13 +87,11 @@ export default function SharePageAdminScreen() {
 
   return (
     <>
-      <div className="flex h-full min-h-0 flex-col gap-6">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Share Links</h1>
-          <p className="text-sm text-muted-foreground">
-            Manage created share links and open actions in modals.
-          </p>
-        </div>
+      <div className="space-y-6">
+        <PageHeader
+          title="Share Links"
+          subtitle="Tạo và quản lý các link chia sẻ "
+        />
 
         {loading && (
           <div className="rounded-md border p-6 text-sm text-muted-foreground">

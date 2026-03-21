@@ -12,12 +12,12 @@ export default function SharePageTableToolbar({
       <Input
         value={searchValue}
         onChange={(e) => onSearchChange(e.target.value)}
-        placeholder="Search by code..."
+        placeholder="Tìm theo mã share link..."
         className="sm:max-w-sm"
       />
 
       <Button asChild>
-        <a href="/admin/share-pages/new">New Share Link</a>
+        <a href="/admin/share-pages/new">Tạo share link</a>
       </Button>
     </div>
   );

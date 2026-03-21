@@ -15,57 +15,42 @@ function fmtDate(value) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString();
+  return date.toLocaleString("vi-VN");
 }
 
-function showToastFallback(message) {
-  if (typeof window !== "undefined") {
-    if (window.showToast) {
-      window.showToast("Info", message, true);
-      return;
-    }
-    console.log(message);
-    alert(message);
-  }
+function SortableHeader({ column, label }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+    >
+      {label}
+      <ArrowUpDown className="ml-2 h-4 w-4" />
+    </Button>
+  );
 }
 
 export function getColumns(actions) {
   return [
     {
       accessorKey: "code",
-      header: ({ column }) => {
-        return (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Code
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
-      cell: ({ row }) => {
-        return <div className="font-mono">{row.getValue("code")}</div>;
-      },
+      header: ({ column }) => <SortableHeader column={column} label="Mã link" />,
+      cell: ({ row }) => <div className="font-mono">{row.getValue("code")}</div>,
     },
     {
       accessorKey: "appName",
       header: "App",
-      cell: ({ row }) => {
-        return (
-          <div>
-            <div className="font-medium">{row.original.appName}</div>
-            <div className="text-xs text-muted-foreground">
-              {row.original.appSlug}
-            </div>
-          </div>
-        );
-      },
+      cell: ({ row }) => (
+        <div>
+          <div className="font-medium">{row.original.appName}</div>
+          <div className="text-xs text-muted-foreground">{row.original.appSlug}</div>
+        </div>
+      ),
     },
     {
       accessorKey: "note",
-      header: "Note",
+      header: "Ghi chú",
       cell: ({ row }) => {
         const value = row.getValue("note");
         if (!value) return <span className="text-muted-foreground">-</span>;
@@ -74,28 +59,17 @@ export function getColumns(actions) {
     },
     {
       accessorKey: "expiresAt",
-      header: "Expires At",
+      header: "Hết hạn",
       cell: ({ row }) => fmtDate(row.getValue("expiresAt")),
     },
     {
       accessorKey: "passCount",
-      header: "Pass Count",
+      header: "Số pass",
       cell: ({ row }) => <div>{row.getValue("passCount")}</div>,
     },
     {
       accessorKey: "createdAt",
-      header: ({ column }) => {
-        return (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          >
-            Created At
-            <ArrowUpDown className="ml-2 h-4 w-4" />
-          </Button>
-        );
-      },
+      header: ({ column }) => <SortableHeader column={column} label="Ngày tạo" />,
       cell: ({ row }) => fmtDate(row.getValue("createdAt")),
     },
     {
@@ -113,26 +87,26 @@ export function getColumns(actions) {
             </DropdownMenuTrigger>
 
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+              <DropdownMenuLabel>Thao tác</DropdownMenuLabel>
               <DropdownMenuSeparator />
 
               <DropdownMenuItem onClick={() => actions?.onView?.(item)}>
-                View
+                Xem chi tiết
               </DropdownMenuItem>
 
               <DropdownMenuItem onClick={() => actions?.onManagePasses?.(item)}>
-                Manage Passes
+                Quản lý pass
               </DropdownMenuItem>
 
               <DropdownMenuItem onClick={() => actions?.onEdit?.(item)}>
-                Edit
+                Chỉnh sửa
               </DropdownMenuItem>
 
               <DropdownMenuItem
                 onClick={() => actions?.onDelete?.(item)}
                 className="text-red-500"
               >
-                Delete
+                Xóa
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

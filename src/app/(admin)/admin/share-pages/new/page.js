@@ -1,3 +1,4 @@
+import PageHeader from "@/components/PageHeader";
 import SharePageForm from "@/features/share-pages/components/SharePageForm";
 
 /**
@@ -8,15 +9,16 @@ import SharePageForm from "@/features/share-pages/components/SharePageForm";
  */
 export default function SharePageNewPage() {
   return (
-    <div className="space-y-6">
-      <div>
-        <div className="text-xl font-semibold">Create share link</div>
-        <div className="text-sm text-neutral-400">
-          Tao trang chia se voi quota va mat khau.
+    <div className="bg-background text-foreground">
+      <div className="mx-auto max-w-7xl px-6">
+        <div className="space-y-6">
+          <PageHeader
+            title="Tạo mới share link"
+            subtitle="Tạo trang chia sẻ với quota và mật khẩu."
+          />
+          <SharePageForm />
         </div>
       </div>
-
-      <SharePageForm />
     </div>
   );
 }

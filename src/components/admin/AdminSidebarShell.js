@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Boxes,
   KeyRound,
   LayoutDashboard,
   Link2,
@@ -16,26 +17,32 @@ import {
 const NAV_ITEMS = [
   {
     href: "/admin",
-    label: "Tong quan",
-    description: "Man hinh chao mung va huong dan nhanh",
+    label: "Tổng quan",
+    description: "Màn hình chào mừng và hướng dẫn nhanh",
     icon: LayoutDashboard,
+  },
+  {
+    href: "/admin/apps",
+    label: "Quản lý app",
+    description: "Quản lý thực thể gốc của hệ thống",
+    icon: Boxes,
   },
   {
     href: "/admin/share-pages",
     label: "Share Links",
-    description: "Quan ly share page va luong pass",
+    description: "Quản lý share page và luồng pass",
     icon: Link2,
   },
   {
     href: "/admin/share-pages/new",
-    label: "Tao Share Link",
-    description: "Tao moi mot trang chia se",
+    label: "Tạo Share Link",
+    description: "Tạo mới một trang chia sẻ",
     icon: Plus,
   },
   {
     href: "/admin/accounts",
     label: "App Accounts",
-    description: "Quan ly cac tai khoan that cua app",
+    description: "Quản lý các tài khoản thật của app",
     icon: KeyRound,
   },
 ];
@@ -92,7 +99,10 @@ export default function AdminSidebarShell({ children }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const currentPage = useMemo(() => {
-    return NAV_ITEMS.find((item) => isItemActive(pathname, item.href))?.label || "Admin";
+    return (
+      NAV_ITEMS.find((item) => isItemActive(pathname, item.href))?.label ||
+      "Admin"
+    );
   }, [pathname]);
 
   useEffect(() => {
@@ -128,9 +138,11 @@ export default function AdminSidebarShell({ children }) {
                   <LayoutDashboard className="h-5 w-5" />
                 </div>
                 <div>
-                  <div className="text-sm font-semibold text-slate-900">Admin Console</div>
+                  <div className="text-sm font-semibold text-slate-900">
+                    Admin Console
+                  </div>
                   <div className="text-xs text-slate-500">
-                    Dieu huong nhanh giua cac cong cu quan tri
+                    Điều hướng nhanh giữa các công cụ quản trị
                   </div>
                 </div>
               </div>
@@ -149,7 +161,7 @@ export default function AdminSidebarShell({ children }) {
                 className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50"
               >
                 <LogOut className="h-4 w-4" />
-                Dang xuat
+                Đăng xuất
               </button>
             </div>
           </div>
@@ -171,10 +183,14 @@ export default function AdminSidebarShell({ children }) {
                 type="button"
                 onClick={toggleMobileSidebar}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-900"
-                aria-label={mobileOpen ? "Dong dieu huong" : "Mo dieu huong"}
+                aria-label={mobileOpen ? "Đóng điều hướng" : "Mở điều hướng"}
                 aria-expanded={mobileOpen}
               >
-                {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                {mobileOpen ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <Menu className="h-5 w-5" />
+                )}
               </button>
             </div>
           </header>
@@ -183,7 +199,7 @@ export default function AdminSidebarShell({ children }) {
             <div className="fixed inset-0 z-40 lg:hidden">
               <button
                 type="button"
-                aria-label="Dong lop phu dieu huong"
+                aria-label="Đóng lớp phủ điều hướng"
                 className="absolute inset-0 bg-slate-950/40"
                 onClick={closeMobileSidebar}
               />
@@ -192,14 +208,16 @@ export default function AdminSidebarShell({ children }) {
                 <div className="flex h-full flex-col">
                   <div className="flex items-center justify-between border-b border-slate-200 px-4 py-4">
                     <div>
-                      <div className="text-sm font-semibold text-slate-900">Admin Console</div>
-                      <div className="text-xs text-slate-500">Dieu huong</div>
+                      <div className="text-sm font-semibold text-slate-900">
+                        Admin Console
+                      </div>
+                      <div className="text-xs text-slate-500">Điều hướng</div>
                     </div>
                     <button
                       type="button"
                       onClick={closeMobileSidebar}
                       className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-900"
-                      aria-label="Dong sidebar"
+                      aria-label="Đóng sidebar"
                     >
                       <X className="h-5 w-5" />
                     </button>
@@ -223,7 +241,7 @@ export default function AdminSidebarShell({ children }) {
                       className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:bg-slate-50"
                     >
                       <LogOut className="h-4 w-4" />
-                      Dang xuat
+                      Đăng xuất
                     </button>
                   </div>
                 </div>
@@ -231,7 +249,7 @@ export default function AdminSidebarShell({ children }) {
             </div>
           ) : null}
 
-          <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <main className="min-h-0 min-w-0 bg-background flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
             {children}
           </main>
         </div>
