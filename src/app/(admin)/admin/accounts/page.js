@@ -2,8 +2,8 @@ import AppAccountAdminScreen from "@/features/app-accounts/components/AppAccount
 
 export default function AppAccountsAdminPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <div className="mx-auto max-w-7xl px-6 py-10">
+    <div className="bg-background text-foreground">
+      <div className="mx-auto max-w-7xl px-6">
         <AppAccountAdminScreen />
       </div>
     </div>

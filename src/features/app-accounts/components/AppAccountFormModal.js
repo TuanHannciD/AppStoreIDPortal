@@ -1,14 +1,5 @@
 "use client";
 
-/**
- * Modal create/edit cho AppAccount.
- *
- * Một modal dùng chung giúp:
- * - tránh duplicate form giữa create và edit
- * - comment chỉ cần đọc ở một nơi
- * - dễ thêm field mới nếu schema AppAccount thay đổi
- */
-
 import { useEffect, useState } from "react";
 import {
   Dialog,
@@ -49,9 +40,6 @@ export default function AppAccountFormModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  /**
-   * Reset form mỗi khi modal mở với mode mới hoặc account mới.
-   */
   useEffect(() => {
     if (!open) return;
 
@@ -85,7 +73,7 @@ export default function AppAccountFormModal({
     e.preventDefault();
 
     if (!appId) {
-      setError("Please select an app first");
+      setError("Vui lòng chọn app trước khi tạo tài khoản.");
       return;
     }
 
@@ -110,16 +98,16 @@ export default function AppAccountFormModal({
           : await createAppAccount(appId, payload);
 
       if (!res?.success) {
-        setError(res?.message || "Failed to save account");
+        setError(res?.message || "Không thể lưu tài khoản.");
         return;
       }
 
       onSaved?.(res.item);
       onToast?.(
-        "Success",
+        "Thành công",
         mode === "edit"
-          ? "App account updated successfully"
-          : "App account created successfully",
+          ? "Đã cập nhật tài khoản app."
+          : "Đã tạo tài khoản app mới.",
         false,
       );
       onOpenChange(false);
@@ -135,10 +123,10 @@ export default function AppAccountFormModal({
       <DialogContent className="flex h-[92vh] w-[calc(100vw-1rem)] max-w-3xl flex-col overflow-hidden p-0 sm:h-auto sm:max-h-[90vh] sm:w-full">
         <DialogHeader className="border-b px-4 py-4 sm:px-6 sm:py-5">
           <DialogTitle>
-            {mode === "edit" ? "Edit App Account" : "Create App Account"}
+            {mode === "edit" ? "Chỉnh sửa tài khoản app" : "Tạo tài khoản app"}
           </DialogTitle>
           <DialogDescription>
-            Manage the real account information stored for the selected app.
+            Quản lý thông tin tài khoản thật đang được lưu cho app đã chọn.
           </DialogDescription>
         </DialogHeader>
 
@@ -152,11 +140,11 @@ export default function AppAccountFormModal({
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
-                <label className="text-sm font-medium">Title</label>
+                <label className="text-sm font-medium">Tiêu đề</label>
                 <Input
                   value={form.title}
                   onChange={(e) => setField("title", e.target.value)}
-                  placeholder="Account title"
+                  placeholder="Ví dụ: Tài khoản chính"
                 />
               </div>
 
@@ -170,49 +158,49 @@ export default function AppAccountFormModal({
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Username</label>
+                <label className="text-sm font-medium">Tên đăng nhập</label>
                 <Input
                   value={form.username}
                   onChange={(e) => setField("username", e.target.value)}
-                  placeholder="Username"
+                  placeholder="Tên đăng nhập"
                 />
               </div>
 
               <div className="space-y-2 sm:col-span-2">
-                <label className="text-sm font-medium">Password</label>
+                <label className="text-sm font-medium">Mật khẩu</label>
                 <Input
                   value={form.password}
                   onChange={(e) => setField("password", e.target.value)}
-                  placeholder="Password"
+                  placeholder="Mật khẩu"
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">2FA Key</label>
+                <label className="text-sm font-medium">Khóa 2FA</label>
                 <Input
                   value={form.twoFaKey}
                   onChange={(e) => setField("twoFaKey", e.target.value)}
-                  placeholder="2FA key"
+                  placeholder="Khóa 2FA"
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="text-sm font-medium">Backup Code</label>
+                <label className="text-sm font-medium">Mã dự phòng</label>
                 <Input
                   value={form.backupCode}
                   onChange={(e) => setField("backupCode", e.target.value)}
-                  placeholder="Backup code"
+                  placeholder="Mã dự phòng"
                 />
               </div>
 
               <div className="space-y-2 sm:col-span-2">
-                <label className="text-sm font-medium">Note</label>
+                <label className="text-sm font-medium">Ghi chú</label>
                 <textarea
                   value={form.note}
                   onChange={(e) => setField("note", e.target.value)}
                   rows={4}
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-                  placeholder="Internal note"
+                  placeholder="Ghi chú nội bộ về tài khoản"
                 />
               </div>
             </div>
@@ -223,7 +211,7 @@ export default function AppAccountFormModal({
                 checked={form.isActive}
                 onChange={(e) => setField("isActive", e.target.checked)}
               />
-              Active account
+              Tài khoản đang hoạt động
             </label>
 
             <DialogFooter className="border-t px-0 pt-4">
@@ -233,10 +221,14 @@ export default function AppAccountFormModal({
                 onClick={() => onOpenChange(false)}
                 className="w-full sm:w-auto"
               >
-                Cancel
+                Hủy
               </Button>
               <Button type="submit" disabled={saving} className="w-full sm:w-auto">
-                {saving ? "Saving..." : mode === "edit" ? "Save Changes" : "Create Account"}
+                {saving
+                  ? "Đang lưu..."
+                  : mode === "edit"
+                    ? "Lưu thay đổi"
+                    : "Tạo tài khoản"}
               </Button>
             </DialogFooter>
           </form>

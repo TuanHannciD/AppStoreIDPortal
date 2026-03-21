@@ -1,19 +1,6 @@
 "use client";
 
-/**
- * Màn hình CRUD riêng cho AppAccount.
- *
- * Flow chính:
- * 1. admin chọn app
- * 2. load danh sách AppAccount của app đó
- * 3. create / edit / delete / toggle active
- *
- * Đây là module "nguồn dữ liệu account thật",
- * khác với màn `Manage Accounts` trong share page vốn chỉ quản lý việc gắn account vào share page.
- */
-
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/ui/button";
 import PageHeader from "@/components/PageHeader";
 import {
   deleteAppAccount,
@@ -21,7 +8,9 @@ import {
   fetchAppsForAccounts,
   updateAppAccount,
 } from "../api/appAccounts.api";
+import AppAccountDataTable from "./AppAccountDataTable";
 import AppAccountFormModal from "./AppAccountFormModal";
+import { getColumns } from "../table/columns";
 
 function accountDisplay(item) {
   return item.email || item.username || item.title || item.id;
@@ -75,7 +64,7 @@ export default function AppAccountAdminScreen() {
       const res = await fetchAppAccountsByApp(appId);
 
       if (!res?.success) {
-        setError(res?.message || "Failed to load app accounts");
+        setError(res?.message || "Không thể tải danh sách tài khoản app.");
         setAccounts([]);
         return;
       }
@@ -103,12 +92,7 @@ export default function AppAccountAdminScreen() {
     if (!q) return accounts;
 
     return accounts.filter((item) => {
-      const haystack = [
-        item.title,
-        item.email,
-        item.username,
-        item.note,
-      ]
+      const haystack = [item.title, item.email, item.username, item.note]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
@@ -138,17 +122,17 @@ export default function AppAccountAdminScreen() {
     });
 
     if (!res?.success) {
-      showToast("Error", res?.message || "Failed to update account", true);
+      showToast("Lỗi", res?.message || "Không thể cập nhật tài khoản.", true);
       return;
     }
 
     upsertLocalAccount(res.item);
-    showToast("Success", "Account status updated", false);
+    showToast("Thành công", "Đã cập nhật trạng thái tài khoản.", false);
   }
 
   async function handleDelete(item) {
     const confirmed = window.confirm(
-      `Delete account "${accountDisplay(item)}"? This cannot be undone.`,
+      `Bạn có chắc muốn xóa tài khoản "${accountDisplay(item)}" không? Thao tác này không thể hoàn tác.`,
     );
 
     if (!confirmed) return;
@@ -156,67 +140,21 @@ export default function AppAccountAdminScreen() {
     const res = await deleteAppAccount(selectedAppId, item.id);
 
     if (!res?.success) {
-      showToast("Error", res?.message || "Failed to delete account", true);
+      showToast("Lỗi", res?.message || "Không thể xóa tài khoản.", true);
       return;
     }
 
     setAccounts((prev) => prev.filter((x) => x.id !== item.id));
-    showToast("Success", "Account deleted successfully", false);
+    showToast("Thành công", "Đã xóa tài khoản.", false);
   }
 
   return (
     <>
       <div className="space-y-6">
         <PageHeader
-          title="App Accounts"
-          subtitle="Create and manage the real account records stored under each app."
-          actions={
-            <Button
-              type="button"
-              onClick={() =>
-                setModal({
-                  open: true,
-                  mode: "create",
-                  account: null,
-                })
-              }
-              disabled={!selectedAppId}
-            >
-              Create Account
-            </Button>
-          }
+          title="Quản lý tài khoản app"
+          subtitle="Tạo và quản lý các tài khoản thật được lưu trực tiếp dưới từng app."
         />
-
-        <div className="grid grid-cols-1 gap-3 rounded-xl border p-4 sm:grid-cols-[240px_1fr]">
-          <div className="space-y-2">
-            <label className="text-sm font-medium">App</label>
-            <select
-              value={selectedAppId}
-              onChange={(e) => setSelectedAppId(e.target.value)}
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              disabled={loadingApps}
-            >
-              <option value="">
-                {loadingApps ? "Loading apps..." : "Select an app"}
-              </option>
-              {apps.map((app) => (
-                <option key={app.id} value={app.id}>
-                  {app.name} ({app.slug})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Search</label>
-            <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="Search title, email, username, note..."
-              className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-            />
-          </div>
-        </div>
 
         {error ? (
           <div className="rounded-md border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
@@ -226,84 +164,41 @@ export default function AppAccountAdminScreen() {
 
         {loadingAccounts ? (
           <div className="rounded-md border p-6 text-sm text-muted-foreground">
-            Loading app accounts...
+            Đang tải danh sách tài khoản app...
           </div>
-        ) : null}
-
-        {!loadingAccounts ? (
-          <div className="space-y-3">
-            {filteredAccounts.length ? (
-              filteredAccounts.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-xl border p-4"
-                >
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="font-medium">{accountDisplay(item)}</div>
-                        <span
-                          className={`rounded-full border px-2 py-0.5 text-[11px] ${
-                            item.isActive
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-rose-200 bg-rose-50 text-rose-700"
-                          }`}
-                        >
-                          {item.isActive ? "ACTIVE" : "INACTIVE"}
-                        </span>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Title: {item.title || "-"}
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Username: {item.username || "-"}
-                      </div>
-                      <div className="text-sm text-muted-foreground break-words">
-                        Note: {item.note || "-"}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          setModal({
-                            open: true,
-                            mode: "edit",
-                            account: item,
-                          })
-                        }
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => handleToggleActive(item)}
-                      >
-                        {item.isActive ? "Disable" : "Enable"}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={() => handleDelete(item)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-                {selectedAppId
-                  ? "No app accounts found for the selected app."
-                  : "Select an app to start managing accounts."}
-              </div>
-            )}
-          </div>
-        ) : null}
+        ) : (
+          <AppAccountDataTable
+            columns={getColumns({
+              onEdit: (item) =>
+                setModal({
+                  open: true,
+                  mode: "edit",
+                  account: item,
+                }),
+              onToggleActive: handleToggleActive,
+              onDelete: handleDelete,
+            })}
+            data={filteredAccounts}
+            apps={apps}
+            loadingApps={loadingApps}
+            selectedAppId={selectedAppId}
+            onSelectedAppIdChange={setSelectedAppId}
+            searchValue={keyword}
+            onSearchChange={setKeyword}
+            onCreate={() =>
+              setModal({
+                open: true,
+                mode: "create",
+                account: null,
+              })
+            }
+            emptyMessage={
+              selectedAppId
+                ? "Chưa có tài khoản nào cho app đã chọn."
+                : "Hãy chọn app để bắt đầu quản lý tài khoản."
+            }
+          />
+        )}
       </div>
 
       <AppAccountFormModal
