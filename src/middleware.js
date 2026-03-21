@@ -4,7 +4,7 @@ import {
   verifyAdminAccessToken,
 } from "@/lib/admin-session";
 
-const ADMIN_API_PREFIXES = ["/api/share-pages", "/api/apps/by-id"];
+const ADMIN_API_PREFIXES = ["/api/share-pages", "/api/apps"];
 
 function isProtectedAdminApi(pathname) {
   return ADMIN_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
@@ -62,5 +62,5 @@ export async function middleware(req) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/share-pages/:path*", "/api/apps/by-id/:path*"],
+  matcher: ["/admin/:path*", "/api/share-pages/:path*", "/api/apps/:path*"],
 };

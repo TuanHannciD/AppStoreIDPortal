@@ -458,3 +458,43 @@ model SharePassVerification {
   @@index([sharePassId])
   @@index([expiresAt])
 }
+
+// ============================================================================
+// AppDeleteLog 
+// ============================================================================
+// Đây là bảng Lưu log cho các hành động xóa của bảng APP.
+//
+// Tại sao cần bảng này?
+// Vì 1 khi xóa app:
+// - Có thể xóa mỗi app tôi 
+// - Có thể xóa cả ShareApp và các bảng phụ thuộc vào app
+// ============================================================================
+
+enum AppDeleteMode {
+  SAFE_DELETE
+  FORCE_DELETE
+}
+
+enum AppDeleteStatus {
+  BLOCKED
+  DELETED
+  FAILED
+}
+
+model AppDeleteLog {
+  id                String          @id @default(cuid())
+  actorUserId       String?
+  actorEmail        String?
+  appId             String
+  appName           String
+  appSlug           String
+  mode              AppDeleteMode
+  status            AppDeleteStatus
+  reason            String?
+  dependencySummary Json?
+  createdAt         DateTime        @default(now())
+
+  @@index([appId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([status, createdAt])
+}
