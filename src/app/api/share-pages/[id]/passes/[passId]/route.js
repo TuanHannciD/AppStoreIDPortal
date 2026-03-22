@@ -2,22 +2,11 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getRemainingQuota } from "@/lib/share-public";
 import { getSharePassStatus } from "@/features/share-pages/lib/pass-status";
-
-/**
- * File API này xử lý các action admin trên MỘT pass cụ thể.
- *
- * Ở Phase 1 mình gom các action nhẹ vào chung một route PATCH:
- * - RESET_USAGE
- * - REVOKE
- * - RESTORE
- * - EDIT
- * - ROTATE
- *
- * Lý do gom chung:
- * - phía UI đơn giản hơn
- * - dễ giải thích flow cho người mới đọc code
- * - sau này nếu action phức tạp hơn vẫn có thể tách route riêng
- */
+import { getCurrentAdminSession } from "@/lib/admin-session";
+import {
+  getSharePassDependencySummary,
+  hasSharePassDependencies,
+} from "@/lib/share-pass-delete";
 
 const UpdatePassSchema = z
   .object({
@@ -56,12 +45,6 @@ const UpdatePassSchema = z
   });
 
 function mapPassResponse(pass) {
-  /**
-   * Chuẩn hóa response trả về cho client sau khi update.
-   *
-   * Nhờ đó UI có thể thay thế trực tiếp row cũ bằng row mới
-   * mà không cần transform lại lần nữa.
-   */
   return {
     id: pass.id,
     label: pass.label,
@@ -79,17 +62,25 @@ function mapPassResponse(pass) {
   };
 }
 
+function parseDeleteMode(req) {
+  const forceValue = req.nextUrl.searchParams.get("force");
+  return forceValue === "1" || forceValue === "true"
+    ? "FORCE_DELETE"
+    : "SAFE_DELETE";
+}
+
+async function parseDeleteBody(req) {
+  try {
+    const body = await req.json();
+    return {
+      reason: String(body?.reason || "").trim() || null,
+    };
+  } catch {
+    return { reason: null };
+  }
+}
+
 export async function PATCH(req, { params }) {
-  /**
-   * Endpoint update một pass.
-   *
-   * Trách nhiệm:
-   * 1. validate body
-   * 2. kiểm tra pass có thuộc sharePage hiện tại không
-   * 3. phân nhánh theo `action`
-   * 4. update DB
-   * 5. trả row mới về cho UI
-   */
   try {
     const body = await req.json();
     const parsed = UpdatePassSchema.safeParse(body);
@@ -124,18 +115,9 @@ export async function PATCH(req, { params }) {
 
     const { action, quotaUsed, reason, label, quotaTotal, expiresAt, newPass } = parsed.data;
 
-    /**
-     * `data`
-     * Là payload cuối cùng sẽ được truyền vào Prisma `update`.
-     *
-     * `message`
-     * Là thông báo success để UI hiển thị toast.
-     */
     let data;
     let message;
 
-    // Phase 1 gom vào một endpoint để UI và tài liệu dễ theo dõi.
-    // Sau này nếu action nhiều hơn, mình có thể tách thành các route nhỏ hơn.
     if (action === "RESET_USAGE") {
       data = {
         quotaUsed: Math.min(quotaUsed, current.quotaTotal),
@@ -146,8 +128,6 @@ export async function PATCH(req, { params }) {
         label: label?.trim() || null,
         quotaTotal: Math.max(quotaTotal, 1),
         expiresAt: expiresAt ? new Date(expiresAt) : null,
-        // Nếu admin giảm quotaTotal xuống nhỏ hơn quotaUsed hiện tại,
-        // mình kẹp quotaUsed lại để dữ liệu không rơi vào trạng thái vô lý.
         quotaUsed: Math.min(current.quotaUsed, Math.max(quotaTotal, 1)),
       };
       message = "Pass updated successfully";
@@ -193,6 +173,147 @@ export async function PATCH(req, { params }) {
         message: "Failed to update pass",
         detail: String(err?.message || err),
       },
+      { status: 500 },
+    );
+  }
+}
+
+export async function DELETE(req, { params }) {
+  const session = await getCurrentAdminSession();
+  if (!session) {
+    return Response.json(
+      { ok: false, message: "Unauthorized." },
+      { status: 401 },
+    );
+  }
+
+  const sharePageId = String(params?.id || "").trim();
+  const sharePassId = String(params?.passId || "").trim();
+
+  if (!sharePageId || !sharePassId) {
+    return Response.json(
+      { ok: false, message: "Pass not found." },
+      { status: 404 },
+    );
+  }
+
+  const mode = parseDeleteMode(req);
+  const { reason } = await parseDeleteBody(req);
+
+  const sharePass = await prisma.sharePass.findFirst({
+    where: {
+      id: sharePassId,
+      sharePageId,
+    },
+    select: {
+      id: true,
+      label: true,
+      sharePageId: true,
+      sharePage: {
+        select: {
+          code: true,
+          appId: true,
+          app: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!sharePass) {
+    return Response.json(
+      { ok: false, message: "Pass not found." },
+      { status: 404 },
+    );
+  }
+
+  const dependencySummary = await getSharePassDependencySummary(sharePass.id);
+
+  if (mode === "SAFE_DELETE" && hasSharePassDependencies(dependencySummary)) {
+    await prisma.sharePassDeleteLog.create({
+      data: {
+        actorUserId: session.userId,
+        actorEmail: session.email,
+        sharePassId: sharePass.id,
+        sharePassLabel: sharePass.label,
+        sharePageId: sharePass.sharePageId,
+        sharePageCode: sharePass.sharePage.code,
+        appId: sharePass.sharePage.appId,
+        appName: sharePass.sharePage.app?.name || "-",
+        mode: "SAFE_DELETE",
+        status: "BLOCKED",
+        reason,
+        dependencySummary,
+      },
+    });
+
+    return Response.json(
+      {
+        ok: false,
+        message: "Cannot delete pass because dependent records still exist.",
+        mode,
+        dependencySummary,
+      },
+      { status: 409 },
+    );
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.sharePass.delete({
+        where: { id: sharePass.id },
+      });
+
+      await tx.sharePassDeleteLog.create({
+        data: {
+          actorUserId: session.userId,
+          actorEmail: session.email,
+          sharePassId: sharePass.id,
+          sharePassLabel: sharePass.label,
+          sharePageId: sharePass.sharePageId,
+          sharePageCode: sharePass.sharePage.code,
+          appId: sharePass.sharePage.appId,
+          appName: sharePass.sharePage.app?.name || "-",
+          mode,
+          status: "DELETED",
+          reason,
+          dependencySummary,
+        },
+      });
+    });
+
+    return Response.json({
+      ok: true,
+      message:
+        mode === "FORCE_DELETE"
+          ? "Pass and all dependent records were deleted."
+          : "Pass deleted successfully.",
+      mode,
+      dependencySummary,
+    });
+  } catch (error) {
+    await prisma.sharePassDeleteLog.create({
+      data: {
+        actorUserId: session.userId,
+        actorEmail: session.email,
+        sharePassId: sharePass.id,
+        sharePassLabel: sharePass.label,
+        sharePageId: sharePass.sharePageId,
+        sharePageCode: sharePass.sharePage.code,
+        appId: sharePass.sharePage.appId,
+        appName: sharePass.sharePage.app?.name || "-",
+        mode,
+        status: "FAILED",
+        reason: reason || String(error?.message || "Unknown delete error"),
+        dependencySummary,
+      },
+    });
+
+    return Response.json(
+      { ok: false, message: "Failed to delete pass." },
       { status: 500 },
     );
   }

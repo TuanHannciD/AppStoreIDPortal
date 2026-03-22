@@ -8,15 +8,16 @@ import SharePageDataTable from "./SharePageDataTable";
 import SharePageDetailModal from "./modals/SharePageDetailModal";
 import SharePassManageModal from "./modals/SharePassManageModal";
 import SharePageEditModal from "./modals/SharePageEditModal";
+import SharePageDeleteModal from "./modals/SharePageDeleteModal";
 import PageHeader from "@/components/PageHeader";
 
-function showToastFallback(message) {
+function showToast(title, message, isInfo = false) {
+  if (typeof window !== "undefined" && window.showToast) {
+    window.showToast(title, message, isInfo);
+    return;
+  }
+
   if (typeof window !== "undefined") {
-    if (window.showToast) {
-      window.showToast("Info", message, true);
-      return;
-    }
-    console.log(message);
     alert(message);
   }
 }
@@ -38,7 +39,7 @@ export default function SharePageAdminScreen() {
     try {
       const res = await fetchSharePages();
       if (!res?.success) {
-        setError(res?.message || "Failed to load share pages");
+        setError(res?.message || "Không thể tải danh sách share page.");
         setRows([]);
         return;
       }
@@ -55,6 +56,11 @@ export default function SharePageAdminScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const selectedRow = useMemo(
+    () => rows.find((item) => item.id === modal.sharePageId) || null,
+    [modal.sharePageId, rows],
+  );
 
   const columns = useMemo(() => {
     return getColumns({
@@ -74,7 +80,10 @@ export default function SharePageAdminScreen() {
           sharePageId: row.id,
         }),
       onDelete: (row) =>
-        showToastFallback(`Delete ${row.code} is not implemented yet`),
+        setModal({
+          type: "delete",
+          sharePageId: row.id,
+        }),
     });
   }, []);
 
@@ -85,17 +94,21 @@ export default function SharePageAdminScreen() {
     });
   }
 
+  function removeSharePage(sharePageId) {
+    setRows((prev) => prev.filter((item) => item.id !== sharePageId));
+  }
+
   return (
     <>
       <div className="space-y-6">
         <PageHeader
           title="Share Links"
-          subtitle="Tạo và quản lý các link chia sẻ "
+          subtitle="Tạo và quản lý các link chia sẻ"
         />
 
         {loading && (
           <div className="rounded-md border p-6 text-sm text-muted-foreground">
-            Loading share links...
+            Đang tải danh sách share link...
           </div>
         )}
 
@@ -147,6 +160,16 @@ export default function SharePageAdminScreen() {
           if (!open) closeModal();
         }}
         onSaved={loadData}
+      />
+
+      <SharePageDeleteModal
+        open={modal.type === "delete"}
+        sharePage={selectedRow}
+        onOpenChange={(open) => {
+          if (!open) closeModal();
+        }}
+        onDeleted={removeSharePage}
+        onToast={showToast}
       />
     </>
   );

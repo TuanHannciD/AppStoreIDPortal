@@ -50,6 +50,9 @@ export async function GET(req, { params }) {
     if (isSharePageExpired(sharePage)) {
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "LINK_EXPIRED",
         success: false,
         message: "Share link expired",
@@ -69,6 +72,9 @@ export async function GET(req, { params }) {
     // Có thể log trạng thái link sẵn sàng nếu bạn muốn audit nhẹ
     await createShareAuthLog(prisma, {
       sharePageId: sharePage.id,
+      sharePageCode: sharePage.code,
+      appId: sharePage.app.id,
+      appName: sharePage.app.name,
       action: "LINK_READY",
       success: true,
       message: "Public metadata loaded",

@@ -75,7 +75,7 @@ export default function AppDetailPage({ params }) {
             <SummaryCard
               title="Monthly usage"
               value={`${app.subscription.monthlyUsed} used · ${app.subscription.monthlyRemaining} remaining`}
-              hint="Resets monthly (mock)."
+              hint="Resets monthly."
             />
             <SummaryCard
               title="Time remaining"

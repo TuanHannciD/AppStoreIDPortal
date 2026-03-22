@@ -10,11 +10,8 @@ import {
 } from "../api/appAccounts.api";
 import AppAccountDataTable from "./AppAccountDataTable";
 import AppAccountFormModal from "./AppAccountFormModal";
+import AppAccountDeleteModal from "./AppAccountDeleteModal";
 import { getColumns } from "../table/columns";
-
-function accountDisplay(item) {
-  return item.email || item.username || item.title || item.id;
-}
 
 export default function AppAccountAdminScreen() {
   const [apps, setApps] = useState([]);
@@ -27,6 +24,10 @@ export default function AppAccountAdminScreen() {
   const [modal, setModal] = useState({
     open: false,
     mode: "create",
+    account: null,
+  });
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
     account: null,
   });
 
@@ -101,12 +102,21 @@ export default function AppAccountAdminScreen() {
     });
   }, [accounts, keyword]);
 
+  const selectedApp = useMemo(
+    () => apps.find((item) => item.id === selectedAppId) || null,
+    [apps, selectedAppId],
+  );
+
   function upsertLocalAccount(item) {
     setAccounts((prev) => {
       const exists = prev.some((x) => x.id === item.id);
       if (!exists) return [item, ...prev];
       return prev.map((x) => (x.id === item.id ? item : x));
     });
+  }
+
+  function removeLocalAccount(accountId) {
+    setAccounts((prev) => prev.filter((x) => x.id !== accountId));
   }
 
   async function handleToggleActive(item) {
@@ -131,21 +141,10 @@ export default function AppAccountAdminScreen() {
   }
 
   async function handleDelete(item) {
-    const confirmed = window.confirm(
-      `Bạn có chắc muốn xóa tài khoản "${accountDisplay(item)}" không? Thao tác này không thể hoàn tác.`,
-    );
-
-    if (!confirmed) return;
-
-    const res = await deleteAppAccount(selectedAppId, item.id);
-
-    if (!res?.success) {
-      showToast("Lỗi", res?.message || "Không thể xóa tài khoản.", true);
-      return;
-    }
-
-    setAccounts((prev) => prev.filter((x) => x.id !== item.id));
-    showToast("Thành công", "Đã xóa tài khoản.", false);
+    setDeleteModal({
+      open: true,
+      account: item,
+    });
   }
 
   return (
@@ -214,6 +213,21 @@ export default function AppAccountAdminScreen() {
           }))
         }
         onSaved={upsertLocalAccount}
+        onToast={showToast}
+      />
+
+      <AppAccountDeleteModal
+        open={deleteModal.open}
+        app={selectedApp}
+        account={deleteModal.account}
+        onOpenChange={(nextOpen) =>
+          setDeleteModal((prev) => ({
+            ...prev,
+            open: nextOpen,
+            account: nextOpen ? prev.account : null,
+          }))
+        }
+        onDeleted={removeLocalAccount}
         onToast={showToast}
       />
     </>

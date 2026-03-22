@@ -93,7 +93,7 @@ export default function HomePage() {
 
             <div className="mt-6">
               <div className="text-sm font-semibold">
-                Available sample apps (mock)
+                Available sample app
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {apps.map((a) => (

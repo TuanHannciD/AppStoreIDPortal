@@ -1,22 +1,5 @@
 "use client";
 
-/**
- * File này là "màn hình điều phối" cho phần Manage Passes trong admin.
- *
- * Nhiệm vụ chính:
- * 1. Tải danh sách pass thuộc một share page.
- * 2. Hiển thị bảng pass + trạng thái hiện tại của từng pass.
- * 3. Mở modal để tạo pass mới.
- * 4. Mở modal action để xem chi tiết / edit / reset usage / rotate / revoke / restore.
- * 5. Đồng bộ lại bảng sau khi user vừa thao tác trên một pass.
- *
- * Bản thiết kế này ưu tiên mobile:
- * - modal chiếm gần full màn hình trên điện thoại
- * - header/footer rõ ràng
- * - phần nội dung cuộn dọc riêng
- * - bảng vẫn giữ scroll ngang thay vì ép vỡ layout
- */
-
 import { useEffect, useMemo, useState } from "react";
 import {
   flexRender,
@@ -49,6 +32,7 @@ import { getPassColumns } from "../../table/pass-columns";
 import SharePassCreateModal from "./SharePassCreateModal";
 import SharePassActionModal from "./SharePassActionModal";
 import SharePageAccountManageModal from "./SharePageAccountManageModal";
+import SharePassDeleteModal from "./SharePassDeleteModal";
 
 function fmtDate(value) {
   if (!value) return "-";
@@ -68,17 +52,13 @@ export default function SharePassManageModal({
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [accountManageOpen, setAccountManageOpen] = useState(false);
-
-  /**
-   * `actionModal`
-   * Giữ trạng thái của modal thao tác cho một pass.
-   *
-   * `mode` quyết định modal đang mở theo flow nào.
-   * `pass` là row hiện tại đang được thao tác.
-   */
   const [actionModal, setActionModal] = useState({
     open: false,
     mode: "view",
+    pass: null,
+  });
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
     pass: null,
   });
 
@@ -96,14 +76,21 @@ export default function SharePassManageModal({
     });
   }
 
-  /**
-   * Cập nhật đúng row vừa đổi để UI phản hồi tức thì
-   * mà không cần refetch toàn bộ danh sách.
-   */
+  function openDelete(pass) {
+    setDeleteModal({
+      open: true,
+      pass,
+    });
+  }
+
   function handlePassUpdated(updatedPass) {
     setRows((prev) =>
       prev.map((item) => (item.id === updatedPass.id ? updatedPass : item)),
     );
+  }
+
+  function handlePassDeleted(passId) {
+    setRows((prev) => prev.filter((item) => item.id !== passId));
   }
 
   async function loadPasses() {
@@ -115,7 +102,7 @@ export default function SharePassManageModal({
     try {
       const res = await fetchSharePagePasses(sharePageId);
       if (!res?.success) {
-        setError(res?.message || "Failed to load passes");
+        setError(res?.message || "Không thể tải danh sách pass");
         setSharePage(null);
         setRows([]);
         return;
@@ -146,6 +133,7 @@ export default function SharePassManageModal({
         onRotate: (item) => openAction("rotate", item),
         onRevoke: (item) => openAction("revoke", item),
         onRestore: (item) => openAction("restore", item),
+        onDelete: (item) => openDelete(item),
       }),
     [],
   );
@@ -161,16 +149,16 @@ export default function SharePassManageModal({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="flex h-[92vh] w-[calc(100vw-1rem)] max-w-6xl flex-col overflow-hidden p-0 sm:h-[90vh] sm:w-[95vw]">
           <DialogHeader className="border-b px-4 py-4 sm:px-6 sm:py-5">
-            <DialogTitle>Manage Passes</DialogTitle>
+            <DialogTitle>Quản lý pass</DialogTitle>
             <DialogDescription>
-              Quan ly quota va trang thai cua share link da chon.
+              Quản lý quota và trạng thái của share link đã chọn.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-5">
             {loading ? (
               <div className="py-10 text-sm text-muted-foreground">
-                Loading...
+                Đang tải dữ liệu...
               </div>
             ) : null}
 
@@ -185,29 +173,29 @@ export default function SharePassManageModal({
                 <div className="grid grid-cols-1 gap-3 text-sm lg:grid-cols-2">
                   <div className="rounded-lg border p-4">
                     <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Share Link
+                      Share link
                     </div>
                     <div className="grid grid-cols-[80px_1fr] gap-2 sm:grid-cols-[120px_1fr]">
-                      <div className="text-muted-foreground">Code</div>
+                      <div className="text-muted-foreground">Mã</div>
                       <div className="break-all font-mono">{sharePage.code}</div>
 
                       <div className="text-muted-foreground">App</div>
                       <div>{sharePage.app?.name || "-"}</div>
 
-                      <div className="text-muted-foreground">App Slug</div>
+                      <div className="text-muted-foreground">Slug app</div>
                       <div className="break-all">{sharePage.app?.slug || "-"}</div>
                     </div>
                   </div>
 
                   <div className="rounded-lg border p-4">
                     <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                      Policy
+                      Chính sách
                     </div>
                     <div className="grid grid-cols-[80px_1fr] gap-2 sm:grid-cols-[120px_1fr]">
-                      <div className="text-muted-foreground">Expires At</div>
+                      <div className="text-muted-foreground">Hết hạn</div>
                       <div>{fmtDate(sharePage.expiresAt)}</div>
 
-                      <div className="text-muted-foreground">Note</div>
+                      <div className="text-muted-foreground">Ghi chú</div>
                       <div className="break-words">{sharePage.note || "-"}</div>
                     </div>
                   </div>
@@ -215,7 +203,7 @@ export default function SharePassManageModal({
 
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-sm text-muted-foreground">
-                    Review status and manage each pass from the actions menu.
+                    Theo dõi trạng thái và thao tác với từng pass từ menu hành động.
                   </div>
                   <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                     <Button
@@ -224,14 +212,14 @@ export default function SharePassManageModal({
                       onClick={() => setAccountManageOpen(true)}
                       className="w-full sm:w-auto"
                     >
-                      Manage Accounts
+                      Quản lý tài khoản
                     </Button>
                     <Button
                       type="button"
                       onClick={() => setCreateOpen(true)}
                       className="w-full sm:w-auto"
                     >
-                      Add Pass
+                      Thêm pass
                     </Button>
                   </div>
                 </div>
@@ -277,7 +265,7 @@ export default function SharePassManageModal({
                                 colSpan={columns.length}
                                 className="h-24 text-center"
                               >
-                                No passes found.
+                                Chưa có pass nào.
                               </TableCell>
                             </TableRow>
                           )}
@@ -320,6 +308,22 @@ export default function SharePassManageModal({
         open={accountManageOpen}
         sharePageId={sharePageId}
         onOpenChange={setAccountManageOpen}
+        onToast={showToast}
+      />
+
+      <SharePassDeleteModal
+        open={deleteModal.open}
+        sharePageId={sharePageId}
+        sharePageCode={sharePage?.code || ""}
+        pass={deleteModal.pass}
+        onOpenChange={(nextOpen) =>
+          setDeleteModal((prev) => ({
+            ...prev,
+            open: nextOpen,
+            pass: nextOpen ? prev.pass : null,
+          }))
+        }
+        onDeleted={handlePassDeleted}
         onToast={showToast}
       />
     </>

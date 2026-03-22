@@ -184,9 +184,6 @@ model SharePage {
   // Danh sách pass của share page này
   passes SharePass[]
 
-  // Log verify / reveal / rate limit / block...
-  logs   ShareAuthLog[]
-
   // Mapping các account được phép reveal trong share page này
   sharePageAccounts SharePageAccount[]
 
@@ -262,9 +259,6 @@ model SharePass {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Log gắn với pass này
-  logs ShareAuthLog[]
-
   // Verification token sinh ra từ pass này
   verifications SharePassVerification[]
 
@@ -290,14 +284,13 @@ model SharePass {
 // ============================================================================
 
 model ShareAuthLog {
-  id          String    @id @default(cuid())
-  sharePageId String
-  sharePage   SharePage @relation(fields: [sharePageId], references: [id], onDelete: Cascade)
-
-  // Optional vì có những log không match được pass cụ thể
-  // Ví dụ INVALID_PASS
-  sharePassId String?
-  sharePass   SharePass? @relation(fields: [sharePassId], references: [id], onDelete: SetNull)
+  id            String @id @default(cuid())
+  sharePageId   String?
+  sharePageCode String?
+  sharePassId   String?
+  sharePassLabel String?
+  appId         String?
+  appName       String?
 
   // Tên hành động
   action String
@@ -320,6 +313,8 @@ model ShareAuthLog {
 
   @@index([sharePageId, createdAt])
   @@index([sharePassId, createdAt])
+  @@index([appId, createdAt])
+  @@index([action, createdAt])
 }
 
 // ============================================================================
@@ -495,6 +490,99 @@ model AppDeleteLog {
   createdAt         DateTime        @default(now())
 
   @@index([appId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum SharePageDeleteMode {
+  SAFE_DELETE
+  FORCE_DELETE
+}
+
+enum SharePageDeleteStatus {
+  BLOCKED
+  DELETED
+  FAILED
+}
+
+model SharePageDeleteLog {
+  id                String                @id @default(cuid())
+  actorUserId       String?
+  actorEmail        String?
+  sharePageId       String
+  sharePageCode     String
+  appId             String
+  appName           String
+  mode              SharePageDeleteMode
+  status            SharePageDeleteStatus
+  reason            String?
+  dependencySummary Json?
+  createdAt         DateTime              @default(now())
+
+  @@index([sharePageId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum SharePassDeleteMode {
+  SAFE_DELETE
+  FORCE_DELETE
+}
+
+enum SharePassDeleteStatus {
+  BLOCKED
+  DELETED
+  FAILED
+}
+
+model SharePassDeleteLog {
+  id                String                @id @default(cuid())
+  actorUserId       String?
+  actorEmail        String?
+  sharePassId       String
+  sharePassLabel    String?
+  sharePageId       String
+  sharePageCode     String
+  appId             String
+  appName           String
+  mode              SharePassDeleteMode
+  status            SharePassDeleteStatus
+  reason            String?
+  dependencySummary Json?
+  createdAt         DateTime              @default(now())
+
+  @@index([sharePassId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([status, createdAt])
+}
+
+enum AppAccountDeleteMode {
+  SAFE_DELETE
+  FORCE_DELETE
+}
+
+enum AppAccountDeleteStatus {
+  BLOCKED
+  DELETED
+  FAILED
+}
+
+model AppAccountDeleteLog {
+  id                String                  @id @default(cuid())
+  actorUserId       String?
+  actorEmail        String?
+  appAccountId      String
+  appAccountTitle   String?
+  appAccountEmail   String?
+  appId             String
+  appName           String
+  mode              AppAccountDeleteMode
+  status            AppAccountDeleteStatus
+  reason            String?
+  dependencySummary Json?
+  createdAt         DateTime                @default(now())
+
+  @@index([appAccountId, createdAt])
   @@index([actorUserId, createdAt])
   @@index([status, createdAt])
 }

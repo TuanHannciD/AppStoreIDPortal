@@ -19,7 +19,7 @@ function SiteNav() {
             href="/login"
             className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50"
           >
-            Login (mock)
+            Login
           </Link>
         </nav>
       </div>

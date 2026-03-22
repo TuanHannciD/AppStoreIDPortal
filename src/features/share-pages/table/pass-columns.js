@@ -69,24 +69,24 @@ export function getPassColumns(actions = {}) {
   return [
     {
       accessorKey: "label",
-      header: "Label",
+      header: "Nhãn",
       cell: ({ row }) => row.getValue("label") || "-",
     },
     {
       accessorKey: "quotaTotal",
-      header: "Quota Total",
+      header: "Tổng lượt",
     },
     {
       accessorKey: "quotaUsed",
-      header: "Quota Used",
+      header: "Đã dùng",
     },
     {
       accessorKey: "quotaRemaining",
-      header: "Quota Remaining",
+      header: "Còn lại",
     },
     {
       accessorKey: "status",
-      header: "Status",
+      header: "Trạng thái",
       cell: ({ row }) => {
         const status = row.getValue("status") || "UNKNOWN";
 
@@ -101,7 +101,7 @@ export function getPassColumns(actions = {}) {
     },
     {
       accessorKey: "createdAt",
-      header: "Created At",
+      header: "Ngày tạo",
       cell: ({ row }) => fmtDate(row.getValue("createdAt")),
     },
     {
@@ -118,50 +118,44 @@ export function getPassColumns(actions = {}) {
             </DropdownMenuTrigger>
 
             <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Pass Actions</DropdownMenuLabel>
+              <DropdownMenuLabel>Thao tác với pass</DropdownMenuLabel>
               <DropdownMenuSeparator />
 
-              <DropdownMenuItem
-                onClick={() => actions?.onView?.(item)}
-              >
-                View
+              <DropdownMenuItem onClick={() => actions?.onView?.(item)}>
+                Xem chi tiết
               </DropdownMenuItem>
 
-              <DropdownMenuItem
-                onClick={() => actions?.onEdit?.(item)}
-              >
-                Edit
+              <DropdownMenuItem onClick={() => actions?.onEdit?.(item)}>
+                Chỉnh sửa
               </DropdownMenuItem>
 
-              <DropdownMenuItem
-                onClick={() => actions?.onResetUsage?.(item)}
-              >
-                Reset Usage
+              <DropdownMenuItem onClick={() => actions?.onResetUsage?.(item)}>
+                Đặt lại lượt dùng
               </DropdownMenuItem>
 
-              <DropdownMenuItem
-                onClick={() => actions?.onRotate?.(item)}
-              >
-                Rotate Pass
+              <DropdownMenuItem onClick={() => actions?.onRotate?.(item)}>
+                Đổi pass
               </DropdownMenuItem>
 
               {item.status === "REVOKED" ? (
                 <DropdownMenuItem onClick={() => actions?.onRestore?.(item)}>
-                  Restore
+                  Khôi phục
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuItem onClick={() => actions?.onRevoke?.(item)}>
-                  Revoke
+                  Thu hồi
                 </DropdownMenuItem>
               )}
 
               <DropdownMenuItem
                 onClick={() =>
-                  showToastFallback(`Delete pass ${item.id} is intentionally deferred to keep audit history safe`)
+                  actions?.onDelete
+                    ? actions.onDelete(item)
+                    : showToastFallback(`Không thể xóa pass ${item.id}`)
                 }
                 className="text-red-500"
               >
-                Delete
+                Xóa
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

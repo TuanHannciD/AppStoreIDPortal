@@ -102,7 +102,11 @@ export async function POST(req, { params }) {
     if (verification.consumedAt) {
       await createShareAuthLog(prisma, {
         sharePageId: verification.sharePageId,
+        sharePageCode: verification.sharePage.code,
         sharePassId: verification.sharePassId,
+        sharePassLabel: verification.sharePass.label,
+        appId: verification.sharePage.app.id,
+        appName: verification.sharePage.app.name,
         action: "REVEAL_FAILED",
         success: false,
         message: "Verification token already consumed",
@@ -123,7 +127,11 @@ export async function POST(req, { params }) {
     if (new Date(verification.expiresAt).getTime() < Date.now()) {
       await createShareAuthLog(prisma, {
         sharePageId: verification.sharePageId,
+        sharePageCode: verification.sharePage.code,
         sharePassId: verification.sharePassId,
+        sharePassLabel: verification.sharePass.label,
+        appId: verification.sharePage.app.id,
+        appName: verification.sharePage.app.name,
         action: "TOKEN_EXPIRED",
         success: false,
         message: "Verification token expired",
@@ -146,7 +154,11 @@ export async function POST(req, { params }) {
     if (isSharePageExpired(sharePage)) {
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
         sharePassId: sharePass.id,
+        sharePassLabel: sharePass.label,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "LINK_EXPIRED",
         success: false,
         message: "Reveal blocked because share link expired",
@@ -166,7 +178,11 @@ export async function POST(req, { params }) {
     if (isSharePassRevoked(sharePass)) {
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
         sharePassId: sharePass.id,
+        sharePassLabel: sharePass.label,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "PASS_REVOKED",
         success: false,
         message: sharePass.reason || "Pass revoked",
@@ -186,7 +202,11 @@ export async function POST(req, { params }) {
     if (isSharePassExpired(sharePass)) {
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
         sharePassId: sharePass.id,
+        sharePassLabel: sharePass.label,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "PASS_EXPIRED",
         success: false,
         message: "Pass expired",
@@ -208,7 +228,11 @@ export async function POST(req, { params }) {
     if (remainingQuota <= 0) {
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
         sharePassId: sharePass.id,
+        sharePassLabel: sharePass.label,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "QUOTA_BLOCK",
         success: false,
         message: "Quota exhausted at reveal step",
@@ -233,7 +257,11 @@ export async function POST(req, { params }) {
     if (!activeLinkAccount?.appAccount) {
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
         sharePassId: sharePass.id,
+        sharePassLabel: sharePass.label,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "REVEAL_FAILED",
         success: false,
         message: "No active account is assigned to this share page",
@@ -281,7 +309,11 @@ export async function POST(req, { params }) {
 
       await createShareAuthLog(tx, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
         sharePassId: sharePass.id,
+        sharePassLabel: sharePass.label,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "REVEAL",
         success: true,
         message: "Account info revealed successfully",
