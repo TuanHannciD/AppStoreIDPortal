@@ -1,7 +1,5 @@
 /**
  * API client riêng cho module App Accounts.
- *
- * Tách file này ra để màn CRUD account không phụ thuộc vào feature share-pages.
  */
 
 export async function fetchAppsForAccounts() {
@@ -42,9 +40,24 @@ export async function updateAppAccount(appId, accountId, payload) {
   return res.json();
 }
 
-export async function deleteAppAccount(appId, accountId) {
-  const res = await fetch(`/api/apps/by-id/${appId}/accounts/${accountId}`, {
+export async function deleteAppAccount(
+  appId,
+  accountId,
+  { force = false, reason = "" } = {},
+) {
+  const query = force ? "?force=1" : "";
+  const res = await fetch(`/api/apps/by-id/${appId}/accounts/${accountId}${query}`, {
     method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
   });
-  return res.json();
+
+  const data = await res.json().catch(() => null);
+  return {
+    success: res.ok && data?.ok,
+    blocked: res.status === 409,
+    message: data?.message,
+    mode: data?.mode || (force ? "FORCE_DELETE" : "SAFE_DELETE"),
+    dependencySummary: data?.dependencySummary || null,
+  };
 }

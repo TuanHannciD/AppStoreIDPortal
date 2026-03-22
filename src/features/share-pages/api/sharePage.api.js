@@ -1,16 +1,8 @@
-/**
- * API client dùng ở feature share-pages.
- * Tách riêng ra để form/component không phải viết fetch trực tiếp.
- */
 export async function fetchApps() {
   const res = await fetch("/api/apps", { cache: "no-store" });
   return res.json();
 }
 
-/**
- * Lấy danh sách account theo app.
- * Dùng khi admin chọn app trong SharePageForm.
- */
 export async function fetchAppAccounts(appId) {
   if (!appId) {
     return { success: true, accounts: [] };
@@ -33,7 +25,6 @@ export async function createSharePage(payload) {
   return res.json();
 }
 
-// Wapper cho get List data
 export async function fetchSharePages() {
   const res = await fetch("/api/share-pages", {
     method: "GET",
@@ -67,6 +58,24 @@ export async function updateSharePage(id, payload) {
   return res.json();
 }
 
+export async function deleteSharePage(id, { force = false, reason = "" } = {}) {
+  const query = force ? "?force=1" : "";
+  const res = await fetch(`/api/share-pages/${id}${query}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reason }),
+  });
+
+  const data = await res.json().catch(() => null);
+  return {
+    success: res.ok && data?.ok,
+    blocked: res.status === 409,
+    message: data?.message,
+    mode: data?.mode || (force ? "FORCE_DELETE" : "SAFE_DELETE"),
+    dependencySummary: data?.dependencySummary || null,
+  };
+}
+
 export async function createSharePass(id, payload) {
   const res = await fetch(`/api/share-pages/${id}/passes`, {
     method: "POST",
@@ -76,15 +85,6 @@ export async function createSharePass(id, payload) {
   return res.json();
 }
 
-/**
- * Cập nhật một pass cụ thể trong màn Manage Passes.
- *
- * Dùng cho các action kiểu:
- * - reset quotaUsed
- * - revoke / restore
- * - edit metadata
- * - rotate pass
- */
 export async function updateSharePass(sharePageId, passId, payload) {
   const res = await fetch(`/api/share-pages/${sharePageId}/passes/${passId}`, {
     method: "PATCH",
@@ -94,10 +94,31 @@ export async function updateSharePass(sharePageId, passId, payload) {
   return res.json();
 }
 
-/**
- * Lấy dữ liệu account đang gắn với một share page
- * cùng pool account khả dụng của app tương ứng.
- */
+export async function deleteSharePass(
+  sharePageId,
+  passId,
+  { force = false, reason = "" } = {},
+) {
+  const query = force ? "?force=1" : "";
+  const res = await fetch(
+    `/api/share-pages/${sharePageId}/passes/${passId}${query}`,
+    {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reason }),
+    },
+  );
+
+  const data = await res.json().catch(() => null);
+  return {
+    success: res.ok && data?.ok,
+    blocked: res.status === 409,
+    message: data?.message,
+    mode: data?.mode || (force ? "FORCE_DELETE" : "SAFE_DELETE"),
+    dependencySummary: data?.dependencySummary || null,
+  };
+}
+
 export async function fetchSharePageAccounts(sharePageId) {
   const res = await fetch(`/api/share-pages/${sharePageId}/accounts`, {
     method: "GET",
@@ -106,16 +127,6 @@ export async function fetchSharePageAccounts(sharePageId) {
   return res.json();
 }
 
-/**
- * Thao tác trên account của một share page.
- *
- * Các action hiện hỗ trợ:
- * - ADD
- * - REMOVE
- * - TOGGLE_ACTIVE
- * - MOVE_UP
- * - MOVE_DOWN
- */
 export async function updateSharePageAccount(sharePageId, payload) {
   const res = await fetch(`/api/share-pages/${sharePageId}/accounts`, {
     method: "PATCH",

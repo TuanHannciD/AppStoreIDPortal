@@ -1,23 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
-
-/**
- * Route thao tác trên một AppAccount cụ thể.
- *
- * Nhiệm vụ:
- * - `PATCH`: sửa nội dung account hoặc toggle active
- * - `DELETE`: xóa account sau khi check các case an toàn
- *
- * Với delete, mục tiêu không phải là "cứ có nút là xóa được".
- * Server cần check trước các case business để tránh:
- * - xóa account đang được gắn vào share page
- * - làm share page mất account mà admin không biết
- *
- * Nghĩa là:
- * - UI vẫn cho bấm Delete
- * - nhưng quyền quyết định cuối cùng nằm ở server
- * - nếu không qua case check, server trả message rõ ràng để UI hiển thị lại
- */
+import { getCurrentAdminSession } from "@/lib/admin-session";
+import {
+  getAppAccountDependencySummary,
+  hasAppAccountDependencies,
+} from "@/lib/app-account-delete";
 
 const UpdateAppAccountSchema = z.object({
   title: z.string().max(200).optional().nullable(),
@@ -45,6 +32,24 @@ function mapAppAccount(item) {
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
   };
+}
+
+function parseDeleteMode(req) {
+  const forceValue = req.nextUrl.searchParams.get("force");
+  return forceValue === "1" || forceValue === "true"
+    ? "FORCE_DELETE"
+    : "SAFE_DELETE";
+}
+
+async function parseDeleteBody(req) {
+  try {
+    const body = await req.json();
+    return {
+      reason: String(body?.reason || "").trim() || null,
+    };
+  } catch {
+    return { reason: null };
+  }
 }
 
 export async function PATCH(req, { params }) {
@@ -107,92 +112,134 @@ export async function PATCH(req, { params }) {
   }
 }
 
-export async function DELETE(_req, { params }) {
-  try {
-    /**
-     * Bước 1:
-     * Kiểm tra account có tồn tại và thuộc đúng app đang thao tác không.
-     */
-    const existing = await prisma.appAccount.findFirst({
-      where: {
-        id: params.accountId,
-        appId: params.appId,
-      },
-      include: {
-        sharePageAccounts: {
-          include: {
-            sharePage: {
-              select: {
-                id: true,
-                code: true,
-              },
-            },
-          },
+export async function DELETE(req, { params }) {
+  const session = await getCurrentAdminSession();
+  if (!session) {
+    return Response.json(
+      { ok: false, message: "Unauthorized." },
+      { status: 401 },
+    );
+  }
+
+  const appId = String(params?.appId || "").trim();
+  const accountId = String(params?.accountId || "").trim();
+
+  if (!appId || !accountId) {
+    return Response.json(
+      { ok: false, message: "App account not found." },
+      { status: 404 },
+    );
+  }
+
+  const mode = parseDeleteMode(req);
+  const { reason } = await parseDeleteBody(req);
+
+  const existing = await prisma.appAccount.findFirst({
+    where: {
+      id: accountId,
+      appId,
+    },
+    select: {
+      id: true,
+      title: true,
+      email: true,
+      appId: true,
+      app: {
+        select: {
+          name: true,
         },
+      },
+    },
+  });
+
+  if (!existing) {
+    return Response.json(
+      { ok: false, message: "App account not found." },
+      { status: 404 },
+    );
+  }
+
+  const dependencySummary = await getAppAccountDependencySummary(existing.id);
+
+  if (mode === "SAFE_DELETE" && hasAppAccountDependencies(dependencySummary)) {
+    await prisma.appAccountDeleteLog.create({
+      data: {
+        actorUserId: session.userId,
+        actorEmail: session.email,
+        appAccountId: existing.id,
+        appAccountTitle: existing.title,
+        appAccountEmail: existing.email,
+        appId: existing.appId,
+        appName: existing.app?.name || "-",
+        mode: "SAFE_DELETE",
+        status: "BLOCKED",
+        reason,
+        dependencySummary,
       },
     });
 
-    if (!existing) {
-      return Response.json(
-        { success: false, message: "App account not found" },
-        { status: 404 },
-      );
-    }
+    return Response.json(
+      {
+        ok: false,
+        message: "Cannot delete this account because dependent records still exist.",
+        mode,
+        dependencySummary,
+      },
+      { status: 409 },
+    );
+  }
 
-    /**
-     * Bước 2:
-     * Check case business quan trọng nhất:
-     * account còn đang được gắn với share page nào không.
-     *
-     * Nếu còn mapping, KHÔNG cho xóa.
-     * Lý do:
-     * - schema hiện tại đang cascade delete mapping
-     * - điều đó có thể làm share page mất account đang dùng thật
-     * - admin nên chủ động gỡ khỏi share page trước rồi mới xóa hẳn
-     */
-    if (existing.sharePageAccounts.length > 0) {
-      const linkedCodes = existing.sharePageAccounts
-        .map((item) => item.sharePage?.code)
-        .filter(Boolean);
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.appAccount.delete({
+        where: { id: existing.id },
+      });
 
-      const previewCodes = linkedCodes.slice(0, 5).join(", ");
-      const suffix =
-        linkedCodes.length > 5
-          ? ` and ${linkedCodes.length - 5} more`
-          : "";
-
-      return Response.json(
-        {
-          success: false,
-          message:
-            linkedCodes.length > 0
-              ? `Cannot delete this account because it is still assigned to ${linkedCodes.length} share page(s): ${previewCodes}${suffix}. Remove it from those share pages first.`
-              : "Cannot delete this account because it is still assigned to one or more share pages.",
+      await tx.appAccountDeleteLog.create({
+        data: {
+          actorUserId: session.userId,
+          actorEmail: session.email,
+          appAccountId: existing.id,
+          appAccountTitle: existing.title,
+          appAccountEmail: existing.email,
+          appId: existing.appId,
+          appName: existing.app?.name || "-",
+          mode,
+          status: "DELETED",
+          reason,
+          dependencySummary,
         },
-        { status: 409 },
-      );
-    }
-
-    /**
-     * Bước 3:
-     * Chỉ khi account không còn bị gắn vào share page nào
-     * thì mới thực hiện delete thật.
-     */
-    await prisma.appAccount.delete({
-      where: { id: existing.id },
+      });
     });
 
     return Response.json({
-      success: true,
-      message: "App account deleted successfully",
+      ok: true,
+      message:
+        mode === "FORCE_DELETE"
+          ? "App account and all dependent records were deleted."
+          : "App account deleted successfully.",
+      mode,
+      dependencySummary,
     });
   } catch (error) {
-    return Response.json(
-      {
-        success: false,
-        message: "Failed to delete app account",
-        detail: String(error?.message || error),
+    await prisma.appAccountDeleteLog.create({
+      data: {
+        actorUserId: session.userId,
+        actorEmail: session.email,
+        appAccountId: existing.id,
+        appAccountTitle: existing.title,
+        appAccountEmail: existing.email,
+        appId: existing.appId,
+        appName: existing.app?.name || "-",
+        mode,
+        status: "FAILED",
+        reason: reason || String(error?.message || "Unknown delete error"),
+        dependencySummary,
       },
+    });
+
+    return Response.json(
+      { ok: false, message: "Failed to delete app account." },
       { status: 500 },
     );
   }

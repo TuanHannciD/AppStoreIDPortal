@@ -80,6 +80,9 @@ export async function POST(req, { params }) {
     if (isSharePageExpired(sharePage)) {
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "LINK_EXPIRED",
         success: false,
         message: "Verify blocked because share link expired",
@@ -112,6 +115,9 @@ export async function POST(req, { params }) {
     if (!matchedPass) {
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "INVALID_PASS",
         success: false,
         message: "Invalid pass",
@@ -132,7 +138,11 @@ export async function POST(req, { params }) {
     if (isSharePassRevoked(matchedPass)) {
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
         sharePassId: matchedPass.id,
+        sharePassLabel: matchedPass.label,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "PASS_REVOKED",
         success: false,
         message: matchedPass.reason || "Pass revoked",
@@ -153,7 +163,11 @@ export async function POST(req, { params }) {
     if (isSharePassExpired(matchedPass)) {
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
         sharePassId: matchedPass.id,
+        sharePassLabel: matchedPass.label,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "PASS_EXPIRED",
         success: false,
         message: "Pass expired",
@@ -175,7 +189,11 @@ export async function POST(req, { params }) {
     if (remainingQuota <= 0) {
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
         sharePassId: matchedPass.id,
+        sharePassLabel: matchedPass.label,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "QUOTA_BLOCK",
         success: false,
         message: "Quota exhausted",
@@ -226,7 +244,11 @@ export async function POST(req, { params }) {
 
       await createShareAuthLog(tx, {
         sharePageId: sharePage.id,
+        sharePageCode: sharePage.code,
         sharePassId: matchedPass.id,
+        sharePassLabel: matchedPass.label,
+        appId: sharePage.app.id,
+        appName: sharePage.app.name,
         action: "VERIFY_PASS",
         success: true,
         message: "Pass verified successfully",
