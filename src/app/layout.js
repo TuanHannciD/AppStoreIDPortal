@@ -5,7 +5,7 @@ import AppFrame from "@/components/layout/AppFrame";
 export const metadata = {
   title: "Customer Portal · App Store ID Access",
   description:
-    "Self-service portal for viewing packages, quotas, and credential access (mock).",
+    "Self-service portal for viewing packages, quotas, and credential access.",
 };
 
 export default function RootLayout({ children }) {
