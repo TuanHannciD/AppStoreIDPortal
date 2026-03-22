@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parsePassFileContent } from "../../share-pages/lib/passBulk";
 
 export const SharePageFormSchema = z
   .object({
@@ -15,6 +16,7 @@ export const SharePageFormSchema = z
     consumeOnVerify: z.boolean(),
 
     mode: z.enum(["single", "multiple"]),
+    multiPassInputMode: z.enum(["file", "autogen"]).default("file"),
 
     passes: z
       .array(
@@ -28,6 +30,20 @@ export const SharePageFormSchema = z
   })
   .superRefine((val, ctx) => {
     const seen = new Set();
+    const passValidation = parsePassFileContent(
+      val.passes
+        .map((item) => `${item.pass || ""}|${item.quota || ""}|${item.label || ""}`)
+        .join("\n"),
+    );
+
+    if (!passValidation.ok) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["passes"],
+        message: passValidation.message,
+      });
+      return;
+    }
 
     for (let i = 0; i < val.passes.length; i++) {
       const p = (val.passes[i].pass || "").trim();
@@ -57,6 +73,7 @@ export function defaultSharePageForm() {
     consumeOnVerify: false,
 
     mode: "single",
+    multiPassInputMode: "file",
     passes: [{ pass: "", quota: 1, label: "" }],
   };
 }

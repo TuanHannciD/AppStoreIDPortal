@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
+import { parsePassFileContent } from "@/features/share-pages/lib/passBulk";
 
 function genCode(len = 8) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -102,6 +103,19 @@ export async function POST(req) {
       passes,
       accountIds,
     } = parsed.data;
+    const passValidation = parsePassFileContent(
+      passes.map((item) => `${item.pass}|${item.quota}|${item.label || ""}`).join("\n"),
+    );
+
+    if (!passValidation.ok) {
+      return Response.json(
+        {
+          success: false,
+          message: passValidation.message,
+        },
+        { status: 400 },
+      );
+    }
     /**
      * Validate:
      * Tất cả accountIds phải thuộc đúng appId.

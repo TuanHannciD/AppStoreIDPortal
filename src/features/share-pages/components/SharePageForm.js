@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchApps,
   fetchAppAccounts,
@@ -21,29 +21,65 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { format } from "date-fns";
+import {
+  buildPassFileContent,
+  generateRandomPassItems,
+  parsePassFileContent,
+  PASS_FILE_ACCEPT,
+  PASS_FILE_TEMPLATE_HEADER,
+} from "../lib/passBulk";
+
+function createDownloadMeta(items) {
+  const content = buildPassFileContent(items);
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+
+  return {
+    downloadUrl: URL.createObjectURL(blob),
+    downloadName: `share-passes-${Date.now()}.txt`,
+  };
+}
+
+function cloneDownloadMeta(meta) {
+  if (!meta?.downloadUrl) return null;
+
+  return {
+    downloadUrl: meta.downloadUrl,
+    downloadName: meta.downloadName,
+  };
+}
 
 export default function SharePageForm() {
   const [apps, setApps] = useState([]);
   const [loadingApps, setLoadingApps] = useState(true);
-
   const [form, setForm] = useState(defaultSharePageForm());
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState(null);
   const [enableExpire, setEnableExpire] = useState(false);
-
-  /**
-   * State mới cho account assignment
-   */
   const [availableAccounts, setAvailableAccounts] = useState([]);
   const [selectedAccountIds, setSelectedAccountIds] = useState([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [accountKeyword, setAccountKeyword] = useState("");
+  const [passFile, setPassFile] = useState(null);
+  const [passFileError, setPassFileError] = useState("");
+  const [autoGenCount, setAutoGenCount] = useState("1");
+  const [autoGenQuota, setAutoGenQuota] = useState("1");
+  const [autoGenMeta, setAutoGenMeta] = useState(null);
+  const [createdDownloadMeta, setCreatedDownloadMeta] = useState(null);
+  const fileInputRef = useRef(null);
 
-  /**
-   * Load apps khi vào màn hình create.
-   */
+  useEffect(() => {
+    return () => {
+      if (autoGenMeta?.downloadUrl) {
+        URL.revokeObjectURL(autoGenMeta.downloadUrl);
+      }
+      if (createdDownloadMeta?.downloadUrl) {
+        URL.revokeObjectURL(createdDownloadMeta.downloadUrl);
+      }
+    };
+  }, [autoGenMeta, createdDownloadMeta]);
+
   useEffect(() => {
     (async () => {
       setLoadingApps(true);
@@ -53,14 +89,6 @@ export default function SharePageForm() {
     })();
   }, []);
 
-  /**
-   * Khi appId đổi:
-   * - reset account selection cũ
-   * - load lại AppAccount của app mới
-   *
-   * Lý do:
-   * account pool luôn phụ thuộc vào app đang chọn.
-   */
   useEffect(() => {
     if (!form.appId) {
       setAvailableAccounts([]);
@@ -85,44 +113,137 @@ export default function SharePageForm() {
     })();
   }, [form.appId]);
 
-  /**
-   * Nếu người dùng chuyển từ multiple -> single
-   * thì chỉ giữ lại pass đầu tiên.
-   */
   useEffect(() => {
     if (form.mode === "single" && form.passes.length > 1) {
       setForm((s) => ({
         ...s,
         passes: [s.passes[0]],
+        multiPassInputMode: "file",
       }));
+      setPassFile(null);
+      setPassFileError("");
+      clearAutoGenMeta();
     }
   }, [form.mode, form.passes.length]);
 
-  const canSubmit = useMemo(() => {
-    return !submitting && !loadingApps;
-  }, [submitting, loadingApps]);
-
+  const canSubmit = useMemo(() => !submitting && !loadingApps, [submitting, loadingApps]);
   const selectedDate = form.expiresAt ? new Date(form.expiresAt) : undefined;
 
+  function clearAutoGenMeta() {
+    setAutoGenMeta((prev) => {
+      if (prev?.downloadUrl) URL.revokeObjectURL(prev.downloadUrl);
+      return null;
+    });
+  }
+
+  function replaceCreatedDownloadMeta(nextMeta) {
+    setCreatedDownloadMeta((prev) => {
+      if (prev?.downloadUrl) URL.revokeObjectURL(prev.downloadUrl);
+      return nextMeta;
+    });
+  }
+
   function setField(name, value) {
-    setForm((s) => ({
-      ...s,
-      [name]: value,
-    }));
+    setForm((s) => ({ ...s, [name]: value }));
   }
 
   function setPasses(passes) {
-    setForm((s) => ({
-      ...s,
-      passes,
-    }));
+    setForm((s) => ({ ...s, passes }));
   }
 
-  /**
-   * Validate form theo schema cũ trước.
-   * Sau đó bổ sung business validation riêng cho accountIds.
-   */
+  function setMultiPassInputMode(mode) {
+    setForm((s) => ({
+      ...s,
+      multiPassInputMode: mode,
+    }));
+    setPassFileError("");
+
+    if (mode !== "file") {
+      setPassFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+
+    if (mode !== "autogen") {
+      clearAutoGenMeta();
+    }
+  }
+
+  async function handlePassFileChange(event) {
+    const file = event.target.files?.[0];
+    setPassFileError("");
+
+    if (!file) {
+      setPassFile(null);
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const parsed = parsePassFileContent(text);
+
+      if (!parsed.ok) {
+        setPassFile(null);
+        setPassFileError(parsed.message);
+        event.target.value = "";
+        return;
+      }
+
+      setPassFile({
+        name: file.name,
+        size: file.size,
+        content: text,
+      });
+      setPasses(parsed.items);
+    } catch (error) {
+      setPassFile(null);
+      setPassFileError(String(error?.message || error));
+      event.target.value = "";
+    }
+  }
+
+  function removePassFile() {
+    setPassFile(null);
+    setPassFileError("");
+    setPasses([{ pass: "", quota: 1, label: "" }]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function handleAutoGenerate() {
+    setPassFileError("");
+    const generated = generateRandomPassItems(autoGenCount, autoGenQuota);
+
+    if (!generated.ok) {
+      clearAutoGenMeta();
+      setPassFileError(generated.message);
+      return;
+    }
+
+    clearAutoGenMeta();
+    setPasses(generated.items);
+    setAutoGenMeta(createDownloadMeta(generated.items));
+  }
+
   function validate(current) {
+    if (current.mode === "multiple" && current.multiPassInputMode === "file") {
+      if (!passFile?.content) {
+        setErrors({ form: "Please attach a valid txt file for bulk pass creation.", fields: {} });
+        return { ok: false };
+      }
+
+      const fileValidation = parsePassFileContent(passFile.content);
+      if (!fileValidation.ok) {
+        setErrors({ form: fileValidation.message, fields: {} });
+        return { ok: false };
+      }
+    }
+
+    if (current.mode === "multiple" && current.multiPassInputMode === "autogen") {
+      if (!current.passes.length || !autoGenMeta?.downloadUrl) {
+        setErrors({ form: "Please generate pass list before creating the share link.", fields: {} });
+        return { ok: false };
+      }
+    }
+
     const parsed = SharePageFormSchema.safeParse(current);
 
     if (!parsed.success) {
@@ -134,11 +255,6 @@ export default function SharePageForm() {
       return { ok: false };
     }
 
-    /**
-     * Business rule:
-     * Vì flow hiện tại là verify -> reveal account,
-     * nên SharePage nên có ít nhất 1 account được gắn.
-     */
     if (selectedAccountIds.length === 0) {
       setErrors({
         form: "Please assign at least one account for this share page.",
@@ -153,7 +269,6 @@ export default function SharePageForm() {
 
   async function onSubmit(e) {
     e.preventDefault();
-
     setServerError("");
     setCreated(null);
 
@@ -163,11 +278,6 @@ export default function SharePageForm() {
     setSubmitting(true);
 
     try {
-      /**
-       * map payload cũ + bổ sung accountIds
-       *
-       * accountIds sẽ dùng để tạo SharePageAccount ở backend.
-       */
       const payload = {
         ...mapFormToCreatePayload(form),
         accountIds: selectedAccountIds,
@@ -180,7 +290,16 @@ export default function SharePageForm() {
         return;
       }
 
-      setCreated(res);
+      const nextCreatedMeta =
+        form.mode === "multiple" && form.multiPassInputMode === "autogen" && form.passes.length
+          ? createDownloadMeta(form.passes)
+          : null;
+
+      replaceCreatedDownloadMeta(nextCreatedMeta);
+      setCreated({
+        ...res,
+        ...(cloneDownloadMeta(nextCreatedMeta) || {}),
+      });
     } catch (err) {
       setServerError(String(err?.message || err));
     } finally {
@@ -191,28 +310,21 @@ export default function SharePageForm() {
   function toggleExpire() {
     setEnableExpire((prev) => {
       const next = !prev;
-
-      setForm((s) => ({
-        ...s,
-        expiresAt: next ? new Date().toISOString() : "",
-      }));
-
+      setForm((s) => ({ ...s, expiresAt: next ? new Date().toISOString() : "" }));
       return next;
     });
   }
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
-      {created && <SharePageResultCard result={created} />}
+      {created && <SharePageResultCard result={created} passes={form.passes} />}
 
       <form onSubmit={onSubmit} className="space-y-6">
-        {/* Share info */}
         <div className="rounded-2xl border border-neutral-800 p-4 space-y-4">
           <div>
-            <div className="text-sm font-semibold">Share link info</div>
-            <div className="text-xs text-neutral-400 mt-1">
-              Cấu hình thông tin cơ bản của share link, thời hạn sử dụng và mã
-              public trên URL.
+              <div className="text-sm font-semibold">Share link info</div>
+              <div className="text-xs text-neutral-400 mt-1">
+              Cấu hình thông tin cơ bản của share link, thời hạn sử dụng và mã public trên URL.
             </div>
           </div>
 
@@ -225,9 +337,7 @@ export default function SharePageForm() {
                 className="w-full rounded-xl border border-neutral-800 px-3 py-2 outline-none focus:border-neutral-600"
                 disabled={loadingApps}
               >
-                <option value="">
-                  {loadingApps ? "Loading..." : "Select an app"}
-                </option>
+                <option value="">{loadingApps ? "Loading..." : "Select an app"}</option>
                 {apps.map((a) => (
                   <option key={a.id} value={a.id}>
                     {a.name} ({a.slug})
@@ -235,9 +345,7 @@ export default function SharePageForm() {
                 ))}
               </select>
               {errors?.fields?.appId?.[0] && (
-                <div className="text-xs text-red-300">
-                  {errors.fields.appId[0]}
-                </div>
+                <div className="text-xs text-red-300">{errors.fields.appId[0]}</div>
               )}
             </div>
 
@@ -259,18 +367,14 @@ export default function SharePageForm() {
                         type="button"
                         className="px-3 py-2 text-sm rounded-xl border border-neutral-800 hover:bg-[rgb(124,124,124)]"
                       >
-                        {selectedDate
-                          ? format(selectedDate, "PPP")
-                          : "Pick a date"}
+                        {selectedDate ? format(selectedDate, "PPP") : "Pick a date"}
                       </button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
                         selected={selectedDate}
-                        onSelect={(d) => {
-                          setField("expiresAt", d ? d.toISOString() : "");
-                        }}
+                        onSelect={(d) => setField("expiresAt", d ? d.toISOString() : "")}
                       />
                     </PopoverContent>
                   </Popover>
@@ -290,9 +394,7 @@ export default function SharePageForm() {
             </div>
 
             <div className="space-y-1 md:col-span-2">
-              <div className="text-xs text-neutral-400">
-                Custom code (advanced, optional)
-              </div>
+              <div className="text-xs text-neutral-400">Custom code (advanced, optional)</div>
               <input
                 value={form.code}
                 onChange={(e) => setField("code", e.target.value)}
@@ -303,7 +405,6 @@ export default function SharePageForm() {
           </div>
         </div>
 
-        {/* Access behavior */}
         <div className="rounded-2xl border border-neutral-800 p-4 space-y-3">
           <div>
             <div className="text-sm font-semibold">Access behavior</div>
@@ -325,11 +426,6 @@ export default function SharePageForm() {
                 <div className="text-sm font-medium">
                   Verify trước, chỉ trừ quota khi reveal account
                 </div>
-                <div className="text-xs text-neutral-400 mt-1">
-                  Đây là flow mới: user nhập pass để xác thực trước; chỉ khi bấm
-                  xem thông tin account thì hệ thống mới gọi API lấy full info
-                  và mới trừ quota.
-                </div>
               </div>
             </label>
 
@@ -342,26 +438,18 @@ export default function SharePageForm() {
                 className="mt-1"
               />
               <div>
-                <div className="text-sm font-medium">
-                  Trừ quota ngay khi verify pass
-                </div>
-                <div className="text-xs text-neutral-400 mt-1">
-                  Chế độ cũ. Chỉ giữ lại để tương thích nếu sau này bạn vẫn muốn
-                  support policy cũ ở backend.
-                </div>
+                <div className="text-sm font-medium">Trừ quota ngay khi verify pass</div>
               </div>
             </label>
           </div>
         </div>
 
-        {/* Pass mode */}
         <div className="rounded-2xl border border-neutral-800 p-4 space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold">Pass mode</div>
               <div className="text-xs text-neutral-400">
-                Single pass dành cho một người dùng; multiple passes dành cho
-                nhiều người dùng trên cùng một share link.
+                Single pass dành cho một người dùng; multiple passes dành cho nhiều người dùng trên cùng một share link.
               </div>
             </div>
 
@@ -391,21 +479,72 @@ export default function SharePageForm() {
               </button>
             </div>
           </div>
+
+          {form.mode === "multiple" ? (
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="rounded-xl border border-neutral-800 p-3 cursor-pointer">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="radio"
+                    name="multiPassInputMode"
+                    checked={form.multiPassInputMode === "file"}
+                    onChange={() => setMultiPassInputMode("file")}
+                    className="mt-1"
+                  />
+                  <div>
+                    <div className="text-sm font-medium">Gen Pass theo kịch bản có sẵn</div>
+                    <div className="text-xs text-neutral-400 mt-1">
+                      Tải file txt và đọc ngay theo định dạng: {PASS_FILE_TEMPLATE_HEADER}
+                    </div>
+                  </div>
+                </div>
+              </label>
+
+              <label className="rounded-xl border border-neutral-800 p-3 cursor-pointer">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="radio"
+                    name="multiPassInputMode"
+                    checked={form.multiPassInputMode === "autogen"}
+                    onChange={() => setMultiPassInputMode("autogen")}
+                    className="mt-1"
+                  />
+                  <div>
+                    <div className="text-sm font-medium">AutoGen pass random</div>
+                    <div className="text-xs text-neutral-400 mt-1">
+                      Tạo pass 8 ký tự alphabet, xuất file txt để lưu trữ và tải xuống.
+                    </div>
+                  </div>
+                </div>
+              </label>
+            </div>
+          ) : null}
         </div>
 
         <PassRowsEditor
           mode={form.mode}
+          inputMode={form.multiPassInputMode}
           passes={form.passes}
           onChange={setPasses}
+          passFile={passFile}
+          passFileError={passFileError}
+          fileInputRef={fileInputRef}
+          onPassFileChange={handlePassFileChange}
+          onPassFileRemove={removePassFile}
+          autoGenCount={autoGenCount}
+          autoGenQuota={autoGenQuota}
+          onAutoGenCountChange={setAutoGenCount}
+          onAutoGenQuotaChange={setAutoGenQuota}
+          onGenerateAutoPasses={handleAutoGenerate}
+          autoGenDownloadUrl={autoGenMeta?.downloadUrl || ""}
+          autoGenDownloadName={autoGenMeta?.downloadName || ""}
+          fileAccept={PASS_FILE_ACCEPT}
         />
 
         <div className="text-xs text-neutral-400 -mt-3">
-          Mỗi pass tương ứng một người dùng hoặc một slot sử dụng. Quota chỉ bị
-          trừ khi người dùng bấm xem thông tin account thành công, không trừ ở
-          bước verify pass.
+          Mỗi pass tương ứng một người dùng hoặc một slot sử dụng. Khi tạo share link hệ thống sẽ kiểm tra lại dữ liệu pass một lần nữa.
         </div>
 
-        {/* Account assignment */}
         <SharePageAccountTable
           accounts={availableAccounts}
           selectedIds={selectedAccountIds}
@@ -419,9 +558,7 @@ export default function SharePageForm() {
           <div className="text-xs text-red-300">{errors.fields.passes[0]}</div>
         )}
 
-        {errors?.form && (
-          <div className="text-xs text-red-300">{errors.form}</div>
-        )}
+        {errors?.form && <div className="text-xs text-red-300">{errors.form}</div>}
 
         {serverError && (
           <div className="rounded-xl border border-red-900/60 bg-red-950/20 p-3 text-sm text-red-200">

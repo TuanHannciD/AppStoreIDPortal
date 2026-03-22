@@ -1,41 +1,31 @@
 "use client";
 
-// CHANGED:
-// Component này dùng để nhập và quản lý danh sách pass của một share link.
-// Người dùng có thể:
-// - xem các pass hiện có
-// - sửa pass / quota / label
-// - thêm dòng mới
-// - xóa dòng
-// - bị khóa thêm/xóa khi đang ở single mode
-//
-// Lưu ý business mới:
-// - verify pass KHÔNG trừ quota
-// - chỉ khi user bấm xem thông tin account thành công thì quota mới bị trừ
-export default function PassRowsEditor({ mode, passes, onChange }) {
-  // CHANGED:
-  // Single mode chỉ cho phép tồn tại đúng 1 pass.
-  // Khi ở mode này, UI sẽ không cho add/remove row.
+export default function PassRowsEditor({
+  mode,
+  inputMode = "file",
+  passes,
+  onChange,
+  passFile,
+  passFileError,
+  fileInputRef,
+  onPassFileChange,
+  onPassFileRemove,
+  autoGenCount,
+  autoGenQuota,
+  onAutoGenCountChange,
+  onAutoGenQuotaChange,
+  onGenerateAutoPasses,
+  autoGenDownloadUrl,
+  autoGenDownloadName,
+  fileAccept,
+}) {
   const isSingle = mode === "single";
+  const isFileMode = !isSingle && inputMode === "file";
+  const isAutoGenMode = !isSingle && inputMode === "autogen";
 
-  // Cập nhật 1 dòng pass theo index
   function updateRow(idx, patch) {
     const next = passes.map((r, i) => (i === idx ? { ...r, ...patch } : r));
     onChange(next);
-  }
-
-  // Thêm một dòng pass mới
-  function addRow() {
-    onChange([...passes, { pass: "", quota: 1, label: "" }]);
-  }
-
-  // Xóa một dòng pass
-  // CHANGED:
-  // Nếu xóa hết tất cả thì vẫn giữ lại 1 dòng rỗng mặc định
-  // để tránh UI rơi vào trạng thái không còn row nào để nhập.
-  function removeRow(idx) {
-    const next = passes.filter((_, i) => i !== idx);
-    onChange(next.length ? next : [{ pass: "", quota: 1, label: "" }]);
   }
 
   return (
@@ -43,95 +33,184 @@ export default function PassRowsEditor({ mode, passes, onChange }) {
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm font-semibold">Passes & Quota</div>
-
-          {/* CHANGED:
-              Sửa mô tả cũ:
-              "every valid use decrements quota"
-              vì câu đó không còn đúng với flow mới nữa.
-              Giờ quota chỉ bị trừ khi reveal account thành công. */}
           <div className="text-xs text-neutral-400">
-            Mỗi lượt truy cập đại diện cho một người dùng; quota chỉ bị giảm khi
-            thông tin tài khoản bị tiết lộ.
+            Quota chỉ bị giảm khi thông tin tài khoản được hiển thị thành công.
           </div>
         </div>
 
-        {!isSingle && (
+        {isFileMode && (
           <button
             type="button"
-            onClick={addRow}
+            onClick={() => fileInputRef?.current?.click()}
             className="px-3 py-2 text-sm rounded-xl border border-neutral-700 hover:bg-neutral-400"
           >
-            Add pass
+            Chọn file txt
           </button>
         )}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="text-neutral-400">
-            <tr className="text-left">
-              <th className="py-2 pr-3">Pass</th>
-              <th className="py-2 pr-3 w-40">Quota</th>
-              <th className="py-2 pr-3">Label (optional)</th>
-              <th className="py-2 w-16"></th>
-            </tr>
-          </thead>
+      {isFileMode ? (
+        <div className="rounded-xl border border-neutral-800 p-4 space-y-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept={fileAccept}
+            onChange={onPassFileChange}
+            className="hidden"
+          />
 
-          <tbody>
-            {passes.map((row, idx) => (
-              <tr key={idx} className="border-t border-neutral-800">
-                <td className="py-2 pr-3">
-                  <input
-                    value={row.pass}
-                    onChange={(e) => updateRow(idx, { pass: e.target.value })}
-                    className="w-full rounded-xl border border-neutral-800 px-3 py-2 outline-none focus:border-neutral-600"
-                    placeholder="e.g. user-abc-001"
-                  />
-                </td>
+          <div className="text-xs text-neutral-400">
+            Định dạng hợp lệ: `Password|quota|label`. Label có thể trống, quota bắt buộc là số.
+          </div>
 
-                <td className="py-2 pr-3">
-                  <input
-                    value={row.quota}
-                    onChange={(e) => updateRow(idx, { quota: e.target.value })}
-                    type="number"
-                    min="1"
-                    className="w-full rounded-xl border border-neutral-800 px-3 py-2 outline-none focus:border-neutral-600 text-right"
-                  />
-                </td>
+          {passFile ? (
+            <div className="rounded-xl border border-neutral-700 bg-neutral-950/30 p-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{passFile.name}</div>
+                <div className="text-xs text-neutral-400">
+                  {(passFile.size / 1024).toFixed(2)} KB, {passes.length} pass hợp lệ
+                </div>
+              </div>
 
-                <td className="py-2 pr-3">
-                  <input
-                    value={row.label || ""}
-                    onChange={(e) => updateRow(idx, { label: e.target.value })}
-                    className="w-full rounded-xl border border-neutral-800 px-3 py-2 outline-none focus:border-neutral-600"
-                    placeholder="User A (optional)"
-                  />
-                </td>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef?.current?.click()}
+                  className="px-3 py-2 text-sm rounded-xl border border-neutral-700 hover:bg-neutral-400"
+                >
+                  Gắn lại file
+                </button>
+                <button
+                  type="button"
+                  onClick={onPassFileRemove}
+                  className="px-3 py-2 text-sm rounded-xl border border-neutral-700 hover:bg-neutral-400"
+                >
+                  Gỡ file
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-neutral-700 p-4 text-sm text-neutral-300">
+              Chưa có file nào được gắn.
+            </div>
+          )}
 
-                <td className="py-2 text-right">
-                  {!isSingle && (
-                    <button
-                      type="button"
-                      onClick={() => removeRow(idx)}
-                      className="px-2 py-2 rounded-xl border border-neutral-800 hover:bg-neutral-400"
-                      title="Remove"
-                    >
-                      ✕
-                    </button>
-                  )}
-                </td>
+          {passFileError ? <div className="text-xs text-red-300">{passFileError}</div> : null}
+        </div>
+      ) : null}
+
+      {isAutoGenMode ? (
+        <div className="rounded-xl border border-neutral-800 p-4 space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <div className="mb-1 text-xs text-neutral-400">Số lượng pass *</div>
+              <input
+                value={autoGenCount}
+                onChange={(e) => onAutoGenCountChange(e.target.value)}
+                type="number"
+                min="1"
+                className="w-full rounded-xl border border-neutral-800 px-3 py-2 outline-none focus:border-neutral-600"
+              />
+            </div>
+
+            <div>
+              <div className="mb-1 text-xs text-neutral-400">Quota mỗi pass *</div>
+              <input
+                value={autoGenQuota}
+                onChange={(e) => onAutoGenQuotaChange(e.target.value)}
+                type="number"
+                min="1"
+                className="w-full rounded-xl border border-neutral-800 px-3 py-2 outline-none focus:border-neutral-600"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={onGenerateAutoPasses}
+              className="px-3 py-2 text-sm rounded-xl border border-neutral-700 hover:bg-neutral-400"
+            >
+              Tạo file txt
+            </button>
+
+            {autoGenDownloadUrl ? (
+              <a
+                href={autoGenDownloadUrl}
+                download={autoGenDownloadName}
+                className="px-3 py-2 text-sm rounded-xl border border-neutral-700 hover:bg-neutral-400"
+              >
+                Tải file pass
+              </a>
+            ) : null}
+          </div>
+
+          <div className="text-xs text-neutral-400">
+            Sau khi tạo, hệ thống sẽ lưu danh sách pass vào form và tạo file txt để tải xuống.
+          </div>
+
+          {passFileError ? <div className="text-xs text-red-300">{passFileError}</div> : null}
+        </div>
+      ) : null}
+
+      {(isSingle || isAutoGenMode) && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="text-neutral-400">
+              <tr className="text-left">
+                <th className="py-2 pr-3">Pass</th>
+                <th className="py-2 pr-3 w-40">Quota</th>
+                <th className="py-2 pr-3">Label (optional)</th>
+                <th className="py-2 w-16"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+
+            <tbody>
+              {passes.map((row, idx) => (
+                <tr key={idx} className="border-t border-neutral-800">
+                  <td className="py-2 pr-3">
+                    <input
+                      value={row.pass}
+                      disabled={isAutoGenMode}
+                      onChange={(e) => updateRow(idx, { pass: e.target.value })}
+                      className="w-full rounded-xl border border-neutral-800 px-3 py-2 outline-none focus:border-neutral-600 disabled:opacity-70"
+                      placeholder="e.g. user-abc-001"
+                    />
+                  </td>
+
+                  <td className="py-2 pr-3">
+                    <input
+                      value={row.quota}
+                      disabled={isAutoGenMode}
+                      onChange={(e) => updateRow(idx, { quota: e.target.value })}
+                      type="number"
+                      min="1"
+                      className="w-full rounded-xl border border-neutral-800 px-3 py-2 outline-none focus:border-neutral-600 text-right disabled:opacity-70"
+                    />
+                  </td>
+
+                  <td className="py-2 pr-3">
+                    <input
+                      value={row.label || ""}
+                      disabled={isAutoGenMode}
+                      onChange={(e) => updateRow(idx, { label: e.target.value })}
+                      className="w-full rounded-xl border border-neutral-800 px-3 py-2 outline-none focus:border-neutral-600 disabled:opacity-70"
+                      placeholder="User A (optional)"
+                    />
+                  </td>
+
+                  <td className="py-2 text-right">
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {isSingle && (
         <div className="text-xs text-neutral-400">
-          {/* CHANGED:
-              Chỉ sửa wording cho rõ hơn một chút, logic giữ nguyên */}
-          Single mode: Chỉ cho phép một lần nhập liệu. Chuyển sang chế độ nhiều
-          lần nhập liệu để thêm. more.
+          Chế độ Single chỉ cho phép một pass.
         </div>
       )}
     </div>
