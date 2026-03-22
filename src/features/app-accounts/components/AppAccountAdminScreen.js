@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/PageHeader";
 import {
-  deleteAppAccount,
   fetchAppAccountsByApp,
   fetchAppsForAccounts,
   updateAppAccount,

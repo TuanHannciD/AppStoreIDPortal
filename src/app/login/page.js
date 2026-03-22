@@ -41,7 +41,7 @@ export default function LoginPage() {
         intent: "success",
       });
       router.push("/admin");
-    } catch (err) {
+    } catch {
       pushToast({
         title: "Đăng nhập thất bại",
         message: "Lỗi mạng. Vui lòng thử lại.",
