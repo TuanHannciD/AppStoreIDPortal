@@ -236,7 +236,8 @@ async function main() {
         createdPages.push({ id: page.id });
       }
 
-      for (const [pageIdx, page] of createdPages.entries()) {
+      for (let pageIdx = 0; pageIdx < createdPages.length; pageIdx += 1) {
+        const page = createdPages[pageIdx];
         await prisma.sharePageAccount.createMany({
           data: appAccounts.map((account, accountIdx) => ({
             sharePageId: page.id,
