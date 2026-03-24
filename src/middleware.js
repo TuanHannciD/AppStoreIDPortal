@@ -1,13 +1,21 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import {
   SESSION_COOKIE_NAME,
   verifyAdminAccessToken,
 } from "@/lib/admin-session";
 
-const ADMIN_API_PREFIXES = ["/api/share-pages", "/api/apps", "/api/account-sources"];
+const ADMIN_API_PREFIXES = ["/api/apps", "/api/account-sources"];
 
 function isProtectedAdminApi(pathname) {
-  return ADMIN_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+  if (ADMIN_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return true;
+  }
+
+  if (!pathname.startsWith("/api/share-pages")) {
+    return false;
+  }
+
+  return !pathname.includes("/by-code/");
 }
 
 function clearSessionCookie(response) {
@@ -20,17 +28,6 @@ function clearSessionCookie(response) {
   return response;
 }
 
-/**
- * Middleware chỉ còn verify JWT.
- *
- * Luồng kiểm tra:
- * - có cookie token hay không
- * - chữ ký token có hợp lệ không
- * - token có hết hạn chưa
- * - role trong token có phải admin không
- *
- * Vì không dùng Prisma nên build được trong edge runtime.
- */
 export async function middleware(req) {
   const { pathname } = req.nextUrl;
   const isAdminPage = pathname.startsWith("/admin");
@@ -62,5 +59,10 @@ export async function middleware(req) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/share-pages/:path*", "/api/apps/:path*", "/api/account-sources/:path*"],
+  matcher: [
+    "/admin/:path*",
+    "/api/share-pages/:path*",
+    "/api/apps/:path*",
+    "/api/account-sources/:path*",
+  ],
 };
