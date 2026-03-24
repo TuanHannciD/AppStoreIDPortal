@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Boxes,
   KeyRound,
+  PlugZap,
   LayoutDashboard,
   Link2,
   LogOut,
@@ -17,35 +18,41 @@ import {
 const NAV_ITEMS = [
   {
     href: "/admin",
-    label: "Tổng quan",
-    description: "Màn hình chào mừng và hướng dẫn nhanh",
+    label: "T\u1ed5ng quan",
+    description: "M\u00e0n h\u00ecnh ch\u00e0o m\u1eebng v\u00e0 h\u01b0\u1edbng d\u1eabn nhanh",
     icon: LayoutDashboard,
   },
   {
     href: "/admin/apps",
-    label: "Quản lý app",
-    description: "Quản lý thực thể gốc của hệ thống",
+    label: "Qu\u1ea3n l\u00fd app",
+    description: "Qu\u1ea3n l\u00fd th\u1ef1c th\u1ec3 g\u1ed1c c\u1ee7a h\u1ec7 th\u1ed1ng",
     icon: Boxes,
   },
   {
     href: "/admin/share-pages",
     label: "Share Links",
-    description: "Quản lý share page và luồng pass",
+    description: "Qu\u1ea3n l\u00fd share page v\u00e0 lu\u1ed3ng pass",
     icon: Link2,
   },
   {
     href: "/admin/share-pages/new",
-    label: "Tạo Share Link",
-    description: "Tạo mới một trang chia sẻ",
+    label: "T\u1ea1o Share Link",
+    description: "T\u1ea1o m\u1edbi m\u1ed9t trang chia s\u1ebb",
     icon: Plus,
   },
   {
     href: "/admin/accounts",
     label: "App Accounts",
-    description: "Quản lý các tài khoản thật của app",
+    description: "Qu\u1ea3n l\u00fd c\u00e1c t\u00e0i kho\u1ea3n th\u1eadt c\u1ee7a app",
     icon: KeyRound,
   },
-];
+  {
+    href: "/admin/account-sources",
+    label: "Ngu\u1ed3n API",
+    description: "Qu\u1ea3n l\u00fd base URL d\u00f9ng \u0111\u1ec3 \u0111\u1ed3ng b\u1ed9 App Account",
+    icon: PlugZap,
+  },
+]
 
 function isItemActive(pathname, href) {
   if (!pathname) return false;

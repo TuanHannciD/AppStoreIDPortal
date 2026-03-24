@@ -1,5 +1,6 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { syncAppAccountById } from "@/lib/app-account-sync";
 import {
   createShareAuthLog,
   getRemainingQuota,
@@ -16,11 +17,11 @@ const RevealSchema = z.object({
 /**
  * POST /api/share-pages/by-code/[code]/reveal
  *
- * Mục đích:
- * - Dùng verificationToken từ bước verify
- * - Lấy full account info
- * - Trừ quota tại đây
- * - Trả dữ liệu đầy đủ cho client
+ * Má»¥c Ä‘Ã­ch:
+ * - DÃ¹ng verificationToken tá»« bÆ°á»›c verify
+ * - Láº¥y full account info
+ * - Trá»« quota táº¡i Ä‘Ã¢y
+ * - Tráº£ dá»¯ liá»‡u Ä‘áº§y Ä‘á»§ cho client
  */
 export async function POST(req, { params }) {
   try {
@@ -86,7 +87,7 @@ export async function POST(req, { params }) {
       );
     }
 
-    // Token phải đúng với code trên URL
+    // Token pháº£i Ä‘Ãºng vá»›i code trÃªn URL
     if (verification.sharePage.code !== code) {
       return Response.json(
         {
@@ -98,7 +99,7 @@ export async function POST(req, { params }) {
       );
     }
 
-    // Token đã dùng rồi
+    // Token Ä‘Ã£ dÃ¹ng rá»“i
     if (verification.consumedAt) {
       await createShareAuthLog(prisma, {
         sharePageId: verification.sharePageId,
@@ -123,7 +124,7 @@ export async function POST(req, { params }) {
       );
     }
 
-    // Token hết hạn
+    // Token háº¿t háº¡n
     if (new Date(verification.expiresAt).getTime() < Date.now()) {
       await createShareAuthLog(prisma, {
         sharePageId: verification.sharePageId,
@@ -249,12 +250,46 @@ export async function POST(req, { params }) {
       );
     }
 
-    // Lấy account đầu tiên đang active theo sortOrder
-    const activeLinkAccount = sharePage.sharePageAccounts.find(
+    // Láº¥y account Ä‘áº§u tiÃªn Ä‘ang active theo sortOrder
+    const activeLinkAccounts = sharePage.sharePageAccounts.filter(
       (x) => x.isActive && x.appAccount?.isActive,
     );
 
-    if (!activeLinkAccount?.appAccount) {
+    let selectedAccount = null;
+    let hadSyncCandidate = false;
+    let hadSyncFailure = false;
+    let lastSyncFailureMessage = "";
+
+    for (const linkAccount of activeLinkAccounts) {
+      const candidate = linkAccount.appAccount;
+      if (!candidate) continue;
+
+      const usesSyncApi = Boolean(candidate.apiSourceConfigId);
+      if (!usesSyncApi) {
+        selectedAccount = candidate;
+        break;
+      }
+
+      hadSyncCandidate = true;
+      const syncResult = await syncAppAccountById({
+        appId: candidate.appId,
+        accountId: candidate.id,
+      });
+
+      if (syncResult?.ok && syncResult?.item) {
+        selectedAccount = syncResult.item;
+        break;
+      }
+
+      hadSyncFailure = true;
+      lastSyncFailureMessage = syncResult?.message || syncResult?.detail || "Sync failed";
+    }
+
+    if (!selectedAccount) {
+      const failureMessage = hadSyncCandidate && hadSyncFailure
+        ? lastSyncFailureMessage || "All synced accounts failed during reveal"
+        : "No active account is assigned to this share page";
+
       await createShareAuthLog(prisma, {
         sharePageId: sharePage.id,
         sharePageCode: sharePage.code,
@@ -264,30 +299,32 @@ export async function POST(req, { params }) {
         appName: sharePage.app.name,
         action: "REVEAL_FAILED",
         success: false,
-        message: "No active account is assigned to this share page",
+        message: failureMessage,
         ...meta,
       });
 
       return Response.json(
         {
           success: false,
-          status: "NO_ACCOUNT_AVAILABLE",
-          message: "No account is currently available for this share link",
+          status: hadSyncCandidate && hadSyncFailure ? "SYNC_ACCOUNT_UNAVAILABLE" : "NO_ACCOUNT_AVAILABLE",
+          message: hadSyncCandidate && hadSyncFailure
+            ? (lastSyncFailureMessage || "All synced accounts failed during reveal")
+            : "No account is currently available for this share link",
         },
-        { status: 404 },
+        { status: hadSyncCandidate && hadSyncFailure ? 502 : 404 },
       );
     }
 
-    const appAccount = activeLinkAccount.appAccount;
+    const appAccount = selectedAccount;
 
     /**
-     * Transaction ở bước reveal:
-     * 1. tăng quotaUsed
+     * Transaction á»Ÿ bÆ°á»›c reveal:
+     * 1. tÄƒng quotaUsed
      * 2. update lastRevealedAt
      * 3. mark verification token consumed
      * 4. ghi log REVEAL
      *
-     * Đây là chỗ consume quota thật theo flow mới.
+     * ÄÃ¢y lÃ  chá»— consume quota tháº­t theo flow má»›i.
      */
     const result = await prisma.$transaction(async (tx) => {
       const updatedPass = await tx.sharePass.update({

@@ -6,7 +6,7 @@ import { Role } from "../src/generated/prisma/enums";
 import { PrismaPg } from "@prisma/adapter-pg";
 
 const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL!, // seed/migrate: dùng DIRECT 5432
+  connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL!, // seed/migrate: dùng DIRECT 5432
 });
 
 const prisma = new PrismaClient({ adapter });
@@ -41,6 +41,45 @@ async function main() {
     },
   });
 
+  await prisma.shareAuthLog.deleteMany();
+  await prisma.sharePassVerification.deleteMany();
+  await prisma.sharePageAccount.deleteMany();
+  await prisma.sharePass.deleteMany();
+  await prisma.sharePage.deleteMany();
+  await prisma.appAccount.deleteMany();
+  await prisma.app.deleteMany();
+  await prisma.apiSourceConfig.deleteMany();
+
+  const appleProSource = await prisma.apiSourceConfig.upsert({
+    where: { id: "seed-applepro-source" },
+    update: {
+      name: "ApplePro Seed",
+      baseUrl: "https://applepro.yuichycsa.id.vn/shareapi",
+      isActive: true,
+    },
+    create: {
+      id: "seed-applepro-source",
+      name: "ApplePro Seed",
+      baseUrl: "https://applepro.yuichycsa.id.vn/shareapi",
+      isActive: true,
+    },
+  });
+
+  const backupSource = await prisma.apiSourceConfig.upsert({
+    where: { id: "seed-backup-source" },
+    update: {
+      name: "Backup Source",
+      baseUrl: "https://backup.example.com/shareapi",
+      isActive: false,
+    },
+    create: {
+      id: "seed-backup-source",
+      name: "Backup Source",
+      baseUrl: "https://backup.example.com/shareapi",
+      isActive: false,
+    },
+  });
+
   // Helper create App
   async function createApp(i: number, group: string) {
     return prisma.app.create({
@@ -52,6 +91,44 @@ async function main() {
         ownerId: user.id,
       },
     });
+  }
+
+  async function createAppAccounts(appId: string, group: string, appIndex: number) {
+    const syncedAccount = await prisma.appAccount.create({
+      data: {
+        appId,
+        title: `${group.toUpperCase()} Synced Account ${appIndex}`,
+        email: `app${group}${appIndex}.01@appstoreviet.com`,
+        username: `app${group}${appIndex}.01@appstoreviet.com`,
+        password: `Asv_${group}_${appIndex}_01`,
+        note: "Seed synced account from external API",
+        isActive: true,
+        apiSourceConfigId: appleProSource.id,
+        externalKey: `test-${group}-${appIndex}-01`,
+        lastSyncedAt: new Date(),
+        lastSyncStatus: "SUCCESS",
+        lastSyncError: null,
+      },
+    });
+
+    const manualAccount = await prisma.appAccount.create({
+      data: {
+        appId,
+        title: `${group.toUpperCase()} Manual Account ${appIndex}`,
+        email: `manual.${group}.${appIndex}@example.com`,
+        username: `manual-${group}-${appIndex}`,
+        password: `Manual_${group}_${appIndex}`,
+        note: "Seed manual account without external sync",
+        isActive: appIndex % 4 !== 0,
+        apiSourceConfigId: appIndex % 2 === 0 ? backupSource.id : null,
+        externalKey: appIndex % 2 === 0 ? `backup-${group}-${appIndex}` : null,
+        lastSyncedAt: appIndex % 2 === 0 ? nowMinusDays(1) : null,
+        lastSyncStatus: appIndex % 2 === 0 ? "FAILED" : null,
+        lastSyncError: appIndex % 2 === 0 ? "Seed timeout from backup source" : null,
+      },
+    });
+
+    return [syncedAccount, manualAccount];
   }
 
   // Helper create SharePage + passes + logs
@@ -151,24 +228,71 @@ async function main() {
   for (const g of groups) {
     for (let i = 1; i <= 10; i++) {
       const app = await createApp(i, g.name);
+      const appAccounts = await createAppAccounts(app.id, g.name, i);
+      const createdPages: Array<{ id: string }> = [];
 
       for (let p = 1; p <= 10; p++) {
-        await createPageBundle(app.id, p, g.opts);
+        const page = await createPageBundle(app.id, p, g.opts);
+        createdPages.push({ id: page.id });
+      }
+
+      for (const [pageIdx, page] of createdPages.entries()) {
+        await prisma.sharePageAccount.createMany({
+          data: appAccounts.map((account, accountIdx) => ({
+            sharePageId: page.id,
+            appAccountId: account.id,
+            sortOrder: accountIdx,
+            isActive: pageIdx % 5 !== 0 || accountIdx === 0,
+          })),
+        });
+      }
+
+      const firstPage = createdPages[0];
+      if (firstPage) {
+        const passes = await prisma.sharePass.findMany({
+          where: { sharePageId: firstPage.id },
+          select: { id: true },
+          take: 3,
+        });
+
+        await prisma.sharePassVerification.createMany({
+          data: passes.map((pass, idx) => ({
+            token: `verify-${g.name}-${i}-${idx}-${crypto.randomBytes(6).toString("hex")}`,
+            sharePageId: firstPage.id,
+            sharePassId: pass.id,
+            expiresAt: nowPlusDays(1),
+            consumedAt: idx === 2 ? new Date() : null,
+          })),
+        });
       }
     }
   }
 
   // quick counts
-  const [u, a, sp, pass, log] = await Promise.all([
+  const [u, apiSources, a, appAccounts, sp, spa, pass, verifications, log] = await Promise.all([
     prisma.user.count(),
+    prisma.apiSourceConfig.count(),
     prisma.app.count(),
+    prisma.appAccount.count(),
     prisma.sharePage.count(),
+    prisma.sharePageAccount.count(),
     prisma.sharePass.count(),
+    prisma.sharePassVerification.count(),
     prisma.shareAuthLog.count(),
   ]);
 
   console.log("✅ Seed done");
-  console.log({ users: u, apps: a, sharePages: sp, sharePasses: pass, shareAuthLogs: log });
+  console.log({
+    users: u,
+    apiSources,
+    apps: a,
+    appAccounts,
+    sharePages: sp,
+    sharePageAccounts: spa,
+    sharePasses: pass,
+    sharePassVerifications: verifications,
+    shareAuthLogs: log,
+  });
   console.log("Login demo:", { email: "admin@example.com", password: "admin-123456" });
 }
 

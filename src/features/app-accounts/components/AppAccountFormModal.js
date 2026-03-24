@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import {
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   createAppAccount,
+  fetchApiSources,
   updateAppAccount,
 } from "../api/appAccounts.api";
 
@@ -25,6 +26,8 @@ const EMPTY_FORM = {
   backupCode: "",
   note: "",
   isActive: true,
+  apiSourceConfigId: "",
+  externalKey: "",
 };
 
 export default function AppAccountFormModal({
@@ -39,6 +42,8 @@ export default function AppAccountFormModal({
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [apiSources, setApiSources] = useState([]);
+  const [loadingSources, setLoadingSources] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -53,6 +58,8 @@ export default function AppAccountFormModal({
         backupCode: account.backupCode || "",
         note: account.note || "",
         isActive: Boolean(account.isActive),
+        apiSourceConfigId: account.apiSourceConfigId || "",
+        externalKey: account.externalKey || "",
       });
     } else {
       setForm(EMPTY_FORM);
@@ -61,6 +68,36 @@ export default function AppAccountFormModal({
     setError("");
     setSaving(false);
   }, [open, mode, account]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let ignore = false;
+
+    async function loadApiSources() {
+      setLoadingSources(true);
+      try {
+        const res = await fetchApiSources();
+        if (!ignore) {
+          setApiSources(res?.items || []);
+        }
+      } catch {
+        if (!ignore) {
+          setApiSources([]);
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingSources(false);
+        }
+      }
+    }
+
+    loadApiSources();
+
+    return () => {
+      ignore = true;
+    };
+  }, [open]);
 
   function setField(name, value) {
     setForm((prev) => ({
@@ -90,6 +127,8 @@ export default function AppAccountFormModal({
         backupCode: form.backupCode || null,
         note: form.note || null,
         isActive: Boolean(form.isActive),
+        apiSourceConfigId: form.apiSourceConfigId || null,
+        externalKey: form.externalKey || null,
       };
 
       const res =
@@ -190,6 +229,34 @@ export default function AppAccountFormModal({
                   value={form.backupCode}
                   onChange={(e) => setField("backupCode", e.target.value)}
                   placeholder="Mã dự phòng"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Nguồn API</label>
+                <select
+                  value={form.apiSourceConfigId}
+                  onChange={(e) => setField("apiSourceConfigId", e.target.value)}
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  disabled={loadingSources}
+                >
+                  <option value="">
+                    {loadingSources ? "Đang tải nguồn API..." : "Không dùng sync API"}
+                  </option>
+                  {apiSources.map((source) => (
+                    <option key={source.id} value={source.id}>
+                      {source.name} ({source.baseUrl})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">External Key</label>
+                <Input
+                  value={form.externalKey}
+                  onChange={(e) => setField("externalKey", e.target.value)}
+                  placeholder="Ví dụ: test6"
                 />
               </div>
 

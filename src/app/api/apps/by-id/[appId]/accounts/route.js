@@ -22,6 +22,8 @@ const CreateAppAccountSchema = z.object({
   backupCode: z.string().max(2000).optional().nullable(),
   note: z.string().max(2000).optional().nullable(),
   isActive: z.boolean().optional(),
+  apiSourceConfigId: z.string().max(191).optional().nullable(),
+  externalKey: z.string().max(200).optional().nullable(),
 });
 
 function mapAppAccount(item) {
@@ -36,6 +38,13 @@ function mapAppAccount(item) {
     backupCode: item.backupCode,
     note: item.note,
     isActive: item.isActive,
+    apiSourceConfigId: item.apiSourceConfigId,
+    externalKey: item.externalKey,
+    lastSyncedAt: item.lastSyncedAt,
+    lastSyncStatus: item.lastSyncStatus,
+    lastSyncResultCode: item.lastSyncResultCode,
+    lastSyncResultMessage: item.lastSyncResultMessage,
+    lastSyncError: item.lastSyncError,
     createdAt: item.createdAt,
     updatedAt: item.updatedAt,
   };
@@ -144,6 +153,8 @@ export async function POST(req, { params }) {
         backupCode: parsed.data.backupCode?.trim() || null,
         note: parsed.data.note?.trim() || null,
         isActive: parsed.data.isActive ?? true,
+        apiSourceConfigId: parsed.data.apiSourceConfigId?.trim() || null,
+        externalKey: parsed.data.externalKey?.trim() || null,
       },
     });
 

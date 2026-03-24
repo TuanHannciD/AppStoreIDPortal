@@ -5,6 +5,7 @@ import PageHeader from "@/components/PageHeader";
 import {
   fetchAppAccountsByApp,
   fetchAppsForAccounts,
+  syncAppAccount,
   updateAppAccount,
 } from "../api/appAccounts.api";
 import AppAccountDataTable from "./AppAccountDataTable";
@@ -29,6 +30,7 @@ export default function AppAccountAdminScreen() {
     open: false,
     account: null,
   });
+  const [syncingAccountId, setSyncingAccountId] = useState("");
 
   function showToast(title, message, isInfo = false) {
     if (typeof window !== "undefined" && window.showToast) {
@@ -128,6 +130,8 @@ export default function AppAccountAdminScreen() {
       backupCode: item.backupCode,
       note: item.note,
       isActive: !item.isActive,
+      apiSourceConfigId: item.apiSourceConfigId,
+      externalKey: item.externalKey,
     });
 
     if (!res?.success) {
@@ -144,6 +148,36 @@ export default function AppAccountAdminScreen() {
       open: true,
       account: item,
     });
+  }
+
+  async function handleSync(item) {
+    if (!selectedAppId || !item?.id) return;
+
+    setSyncingAccountId(item.id);
+
+    try {
+      const res = await syncAppAccount(selectedAppId, item.id);
+
+      if (!res?.success) {
+        if (res?.item) {
+          upsertLocalAccount(res.item);
+        }
+        showToast("Lỗi", res?.message || "Không thể đồng bộ tài khoản.", true);
+        return;
+      }
+
+      if (res?.item) {
+        upsertLocalAccount(res.item);
+      } else {
+        await loadAccounts(selectedAppId);
+      }
+
+      showToast("Thành công", res?.message || "Đã đồng bộ tài khoản.", false);
+    } catch (err) {
+      showToast("Lỗi", String(err?.message || err), true);
+    } finally {
+      setSyncingAccountId("");
+    }
   }
 
   return (
@@ -175,6 +209,8 @@ export default function AppAccountAdminScreen() {
                 }),
               onToggleActive: handleToggleActive,
               onDelete: handleDelete,
+              onSync: handleSync,
+              syncingAccountId,
             })}
             data={filteredAccounts}
             apps={apps}

@@ -110,6 +110,46 @@ model App {
 }
 
 // ============================================================================
+// API SOURCE CONFIG
+// ============================================================================
+// Báº£ng lÆ°u cáº¥u hÃ¬nh API nguá»“n dÃ¹ng chung Ä‘á»ƒ Ä‘á»“ng bá»™ account.
+//
+// VÃ­ dá»¥:
+// - name    = "ApplePro"
+// - baseUrl = "https://applepro.yuichycsa.id.vn/shareapi"
+//
+// AppAccount sáº½ lÆ°u externalKey Ä‘á»ƒ backend ghÃ©p URL:
+// baseUrl + "/" + externalKey
+// ============================================================================
+
+model ApiSourceConfig {
+  id      String @id @default(cuid())
+  name    String
+  baseUrl String
+
+  isActive Boolean @default(true)
+
+  cronEnabled          Boolean  @default(false)
+  cronIntervalHours    Int?
+  cronMaxAccountsPerRun Int?
+  cronStatus           String?
+  lastCronStartedAt    DateTime?
+  lastCronFinishedAt   DateTime?
+  nextCronRunAt        DateTime?
+  lastCronSummary      String?
+  lastCronError        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  appAccounts AppAccount[]
+
+  @@index([isActive])
+  @@index([cronEnabled])
+  @@index([nextCronRunAt])
+}
+
+// ============================================================================
 // SHARE PAGE
 // ============================================================================
 // SharePage là link public mà user sẽ truy cập.
@@ -353,6 +393,15 @@ model AppAccount {
   twoFaKey   String?
   backupCode String?
 
+  apiSourceConfigId String?
+  apiSourceConfig   ApiSourceConfig? @relation(fields: [apiSourceConfigId], references: [id], onDelete: SetNull)
+  externalKey           String?
+  lastSyncedAt          DateTime?
+  lastSyncStatus        String?
+  lastSyncResultCode    String?
+  lastSyncResultMessage String?
+  lastSyncError         String?
+
   // Ghi chú nội bộ
   note String?
 
@@ -367,6 +416,8 @@ model AppAccount {
 
   @@index([appId])
   @@index([isActive])
+  @@index([apiSourceConfigId])
+  @@index([lastSyncedAt])
 }
 
 // ============================================================================
