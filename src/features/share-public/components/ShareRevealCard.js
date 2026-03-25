@@ -110,7 +110,7 @@ export default function ShareRevealCard({
               value={accountInfo?.password}
               onCopy={() => copyText(accountInfo?.password)}
             />
-            <FieldRow
+            {/* <FieldRow
               label="2FA Key"
               value={accountInfo?.twoFaKey}
               onCopy={() => copyText(accountInfo?.twoFaKey)}
@@ -119,7 +119,7 @@ export default function ShareRevealCard({
               label="Backup Code"
               value={accountInfo?.backupCode}
               onCopy={() => copyText(accountInfo?.backupCode)}
-            />
+            /> */}
           </div>
 
           <div className="space-y-1">

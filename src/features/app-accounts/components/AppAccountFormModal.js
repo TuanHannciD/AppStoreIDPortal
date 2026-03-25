@@ -159,7 +159,7 @@ export default function AppAccountFormModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[92vh] w-[calc(100vw-1rem)] max-w-3xl flex-col overflow-hidden p-0 sm:h-auto sm:max-h-[90vh] sm:w-full">
+      <DialogContent className="flex h-[92vh] w-[calc(100vw-1rem)] max-w-3xl flex-col overflow-auto p-0 sm:h-auto sm:max-h-[90vh] sm:w-full">
         <DialogHeader className="border-b px-4 py-4 sm:px-6 sm:py-5">
           <DialogTitle>
             {mode === "edit" ? "Chỉnh sửa tài khoản app" : "Tạo tài khoản app"}
@@ -214,7 +214,7 @@ export default function AppAccountFormModal({
                 />
               </div>
 
-              <div className="space-y-2">
+              {/* <div className="space-y-2">
                 <label className="text-sm font-medium">Khóa 2FA</label>
                 <Input
                   value={form.twoFaKey}
@@ -230,18 +230,22 @@ export default function AppAccountFormModal({
                   onChange={(e) => setField("backupCode", e.target.value)}
                   placeholder="Mã dự phòng"
                 />
-              </div>
+              </div> */}
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Nguồn API</label>
                 <select
                   value={form.apiSourceConfigId}
-                  onChange={(e) => setField("apiSourceConfigId", e.target.value)}
+                  onChange={(e) =>
+                    setField("apiSourceConfigId", e.target.value)
+                  }
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                   disabled={loadingSources}
                 >
                   <option value="">
-                    {loadingSources ? "Đang tải nguồn API..." : "Không dùng sync API"}
+                    {loadingSources
+                      ? "Đang tải nguồn API..."
+                      : "Không dùng sync API"}
                   </option>
                   {apiSources.map((source) => (
                     <option key={source.id} value={source.id}>
@@ -290,7 +294,11 @@ export default function AppAccountFormModal({
               >
                 Hủy
               </Button>
-              <Button type="submit" disabled={saving} className="w-full sm:w-auto">
+              <Button
+                type="submit"
+                disabled={saving}
+                className="w-full sm:w-auto"
+              >
                 {saving
                   ? "Đang lưu..."
                   : mode === "edit"
