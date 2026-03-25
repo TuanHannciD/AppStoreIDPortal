@@ -11,7 +11,7 @@ export default function HomePage() {
     <div className="space-y-6">
       <PageHeader
         title="Welcome"
-        subtitle="Cổng thông tin này cho phép bạn xem gói thuê, hạn mức còn lại và thông tin đăng nhập (giả lập) cho một ID App Store cụ thể theo đường dẫn (slug) của từng ứng dụng."
+        subtitle="Cổng thông tin này cho phép bạn xem gói thuê, hạn mức còn lại và thông tin đăng nhập (giả lập) cho một ID App Store cụ thể theo đường dẫn (slug) của từng ứng dụng. Đây là test CI/CD"
         actions={
           <div className="flex gap-2">
             <Link
@@ -92,9 +92,7 @@ export default function HomePage() {
             </div>
 
             <div className="mt-6">
-              <div className="text-sm font-semibold">
-                Available sample app
-              </div>
+              <div className="text-sm font-semibold">Available sample app</div>
               <div className="mt-2 flex flex-wrap gap-2">
                 {apps.map((a) => (
                   <Link
