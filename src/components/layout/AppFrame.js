@@ -27,20 +27,17 @@ function SiteNav() {
   );
 }
 
-/**
- * Quyết định khung ngoài cùng của app theo pathname hiện tại.
- *
- * Với `/admin`:
- * - không bọc `main max-w-6xl`
- * - không render footer public
- * - để admin shell tự kiểm soát full viewport và scroll
- */
 export default function AppFrame({ children }) {
   const pathname = usePathname();
   const isAdminRoute = pathname?.startsWith("/admin");
+  const isHomeRoute = pathname === "/";
 
   if (isAdminRoute) {
     return <div className="h-screen overflow-hidden">{children}</div>;
+  }
+
+  if (isHomeRoute) {
+    return <div className="min-h-screen bg-slate-50">{children}</div>;
   }
 
   return (
