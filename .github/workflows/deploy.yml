@@ -1,0 +1,47 @@
+name: AppStoreIDPortal CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build project
+        run: pnpm run build
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: verify
+
+    steps:
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST_APPSTOREIDPORTAL }}
+          username: ${{ secrets.USERNAME_APPSTOREIDPORTAL }}
+          port: ${{ secrets.PORT_APPSTOREIDPORTAL }}
+          key: ${{ secrets.SSH_KEY_APPSTOREIDPORTAL }}
+          script: |
+            cd /www/wwwroot/AppStoreIDPortal
+            ./deploy.sh
