@@ -24,6 +24,12 @@ jobs:
           node-version: 20
           cache: pnpm
 
+      - name: Create .env file
+        run: |
+          cat > .env << 'EOF'
+          ${{ secrets.ENV_FILE_APPSTOREIDPORTAL }}
+          EOF
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 

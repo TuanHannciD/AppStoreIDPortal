@@ -25,3 +25,6 @@ npm run render:admin-account -- --email admin@example.com --password your-passwo
 ```
 
 Lệnh trên sẽ sinh file SQL tại `tmp/admin-user.sql`. Bạn cũng có thể đổi sang `--format json` hoặc truyền `--out` để đổi đường dẫn file đầu ra.
+
+
+pm2 start ecosystem.config.js
