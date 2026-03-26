@@ -318,30 +318,55 @@ export async function POST(req, { params }) {
     const appAccount = selectedAccount;
 
     /**
-     * Transaction á»Ÿ bÆ°á»›c reveal:
-     * 1. tÄƒng quotaUsed
-     * 2. update lastRevealedAt
-     * 3. mark verification token consumed
-     * 4. ghi log REVEAL
-     *
-     * ÄÃ¢y lÃ  chá»— consume quota tháº­t theo flow má»›i.
+     * Transaction race-safe cho bước reveal:
+     * 1. claim token nếu token vẫn chưa bị consume
+     * 2. consume quota bằng update có điều kiện
+     * 3. nếu quota không còn, rollback và trả lỗi
+     * 4. ghi log REVEAL nếu thành công
      */
+    const now = new Date();
+
     const result = await prisma.$transaction(async (tx) => {
-      const updatedPass = await tx.sharePass.update({
-        where: { id: sharePass.id },
+      const tokenClaim = await tx.sharePassVerification.updateMany({
+        where: {
+          id: verification.id,
+          consumedAt: null,
+        },
+        data: {
+          consumedAt: now,
+        },
+      });
+
+      if (tokenClaim.count !== 1) {
+        throw new Error("TOKEN_ALREADY_CONSUMED");
+      }
+
+      const quotaConsume = await tx.sharePass.updateMany({
+        where: {
+          id: sharePass.id,
+          revokedAt: null,
+          OR: [
+            { expiresAt: null },
+            { expiresAt: { gt: now } },
+          ],
+          quotaUsed: {
+            lt: sharePass.quotaTotal,
+          },
+        },
         data: {
           quotaUsed: {
             increment: 1,
           },
-          lastRevealedAt: new Date(),
+          lastRevealedAt: now,
         },
       });
 
-      await tx.sharePassVerification.update({
-        where: { id: verification.id },
-        data: {
-          consumedAt: new Date(),
-        },
+      if (quotaConsume.count !== 1) {
+        throw new Error("QUOTA_EXHAUSTED_RACE");
+      }
+
+      const updatedPass = await tx.sharePass.findUnique({
+        where: { id: sharePass.id },
       });
 
       await createShareAuthLog(tx, {
@@ -359,6 +384,17 @@ export async function POST(req, { params }) {
 
       return updatedPass;
     });
+
+    if (!result) {
+      return Response.json(
+        {
+          success: false,
+          status: "SERVER_ERROR",
+          message: "Failed to update pass after reveal",
+        },
+        { status: 500 },
+      );
+    }
 
     return Response.json({
       success: true,
@@ -387,6 +423,28 @@ export async function POST(req, { params }) {
       },
     });
   } catch (err) {
+    if (String(err?.message || err) === "TOKEN_ALREADY_CONSUMED") {
+      return Response.json(
+        {
+          success: false,
+          status: "TOKEN_CONSUMED",
+          message: "This verification token has already been used",
+        },
+        { status: 409 },
+      );
+    }
+
+    if (String(err?.message || err) === "QUOTA_EXHAUSTED_RACE") {
+      return Response.json(
+        {
+          success: false,
+          status: "QUOTA_EXHAUSTED",
+          message: "Quota has been exhausted for this pass",
+        },
+        { status: 403 },
+      );
+    }
+
     return Response.json(
       {
         success: false,

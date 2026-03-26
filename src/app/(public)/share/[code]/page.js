@@ -11,7 +11,7 @@ export default async function SharePage({ params }) {
 
   return (
     <div className="bg-background text-foreground">
-      <div className="mx-auto max-w-4xl px-6 py-10">
+      <div className="mx-auto w-full max-w-[1440px] px-3 py-3 sm:px-4 sm:py-4 lg:px-6 lg:py-6">
         <SharePublicScreen code={code} />
       </div>
     </div>

@@ -221,7 +221,7 @@ export async function POST(req, { params }) {
      * Hiện tại vẫn tạo token để bước reveal dùng chung.
      */
     const token = generateVerificationToken();
-    const tokenExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 phút
+    const tokenExpiresAt = new Date(Date.now() + 30 * 1000); // 30s
 
     await prisma.$transaction(async (tx) => {
       // update thời điểm verify gần nhất
