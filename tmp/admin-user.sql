@@ -1,2 +1,2 @@
 INSERT INTO "User" ("email", "password", "role")
-VALUES ('dramatics@gmail.com', '3d036cdb5aa8e1b89ab3b09c3ccd6ad3dba6ed39c11994304f160d913310e188', 'SUPER_ADMIN');
+VALUES ('khang281203@gmail.com', '0d8cb72ea687d96fce197261970109ccba7f516800473992894304d8a3282a1b', 'SUPER_ADMIN');
