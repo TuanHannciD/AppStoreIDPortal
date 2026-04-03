@@ -1,4 +1,3 @@
-import "dotenv/config";
 import crypto from "node:crypto";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { Role } from "../src/generated/prisma/enums";
