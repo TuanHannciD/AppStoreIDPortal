@@ -2,8 +2,8 @@
 import { PrismaClient } from "../generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) throw new Error("Missing DATABASE_URL");
+const connectionString = process.env.DATABASECus_URL || process.env.DATABASE_URL;
+if (!connectionString) throw new Error("Missing DATABASECus_URL or DATABASE_URL");
 
 const adapter = new PrismaPg({ connectionString });
 

@@ -3,10 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { getRemainingQuota } from "@/lib/share-public";
 import { getSharePassStatus } from "@/features/share-pages/lib/pass-status";
 import { getCurrentAdminSession } from "@/lib/admin-session";
-import {
-  getSharePassDependencySummary,
-  hasSharePassDependencies,
-} from "@/lib/share-pass-delete";
 
 const UpdatePassSchema = z
   .object({
@@ -80,6 +76,16 @@ async function parseDeleteBody(req) {
   }
 }
 
+async function getSharePassDependencySummary(sharePassId) {
+  const shareAuthLogs = await prisma.shareAuthLog.count({
+    where: { sharePassId },
+  });
+
+  return {
+    shareAuthLogs,
+  };
+}
+
 export async function PATCH(req, { params }) {
   try {
     const body = await req.json();
@@ -99,7 +105,7 @@ export async function PATCH(req, { params }) {
     const current = await prisma.sharePass.findFirst({
       where: {
         id: params.passId,
-        sharePageId: params.id,
+        shareLinkId: params.id,
       },
     });
 
@@ -113,7 +119,15 @@ export async function PATCH(req, { params }) {
       );
     }
 
-    const { action, quotaUsed, reason, label, quotaTotal, expiresAt, newPass } = parsed.data;
+    const {
+      action,
+      quotaUsed,
+      reason,
+      label,
+      quotaTotal,
+      expiresAt,
+      newPass,
+    } = parsed.data;
 
     let data;
     let message;
@@ -187,10 +201,10 @@ export async function DELETE(req, { params }) {
     );
   }
 
-  const sharePageId = String(params?.id || "").trim();
+  const shareLinkId = String(params?.id || "").trim();
   const sharePassId = String(params?.passId || "").trim();
 
-  if (!sharePageId || !sharePassId) {
+  if (!shareLinkId || !sharePassId) {
     return Response.json(
       { ok: false, message: "Pass not found." },
       { status: 404 },
@@ -203,21 +217,20 @@ export async function DELETE(req, { params }) {
   const sharePass = await prisma.sharePass.findFirst({
     where: {
       id: sharePassId,
-      sharePageId,
+      shareLinkId,
     },
     select: {
       id: true,
       label: true,
-      sharePageId: true,
-      sharePage: {
+      shareLinkId: true,
+      quotaTotal: true,
+      quotaUsed: true,
+      revokedAt: true,
+      reason: true,
+      shareLink: {
         select: {
           code: true,
-          appId: true,
-          app: {
-            select: {
-              name: true,
-            },
-          },
+          appLabel: true,
         },
       },
     },
@@ -232,88 +245,69 @@ export async function DELETE(req, { params }) {
 
   const dependencySummary = await getSharePassDependencySummary(sharePass.id);
 
-  if (mode === "SAFE_DELETE" && hasSharePassDependencies(dependencySummary)) {
-    await prisma.sharePassDeleteLog.create({
+  try {
+    if (mode === "SAFE_DELETE") {
+      await prisma.sharePass.update({
+        where: { id: sharePass.id },
+        data: {
+          revokedAt: sharePass.revokedAt || new Date(),
+          reason: reason || sharePass.reason || "ADMIN_SOFT_DELETE",
+        },
+      });
+
+      await prisma.shareAuthLog.create({
+        data: {
+          shareLinkId: sharePass.shareLinkId,
+          shareLinkCode: sharePass.shareLink?.code || null,
+          sharePassId: sharePass.id,
+          sharePassLabel: sharePass.label,
+          action: "PASS_SOFT_DELETE",
+          success: true,
+          message: reason || "Pass revoked by admin as soft delete",
+          ipAddress: null,
+          userAgent: `admin:${session.email}`,
+        },
+      });
+
+      return Response.json({
+        ok: true,
+        message: "Pass đã được xóa mềm bằng cách thu hồi quyền truy cập.",
+        mode,
+        dependencySummary,
+      });
+    }
+
+    await prisma.shareAuthLog.create({
       data: {
-        actorUserId: session.userId,
-        actorEmail: session.email,
+        shareLinkId: sharePass.shareLinkId,
+        shareLinkCode: sharePass.shareLink?.code || null,
         sharePassId: sharePass.id,
         sharePassLabel: sharePass.label,
-        sharePageId: sharePass.sharePageId,
-        sharePageCode: sharePass.sharePage.code,
-        appId: sharePass.sharePage.appId,
-        appName: sharePass.sharePage.app?.name || "-",
-        mode: "SAFE_DELETE",
-        status: "BLOCKED",
-        reason,
-        dependencySummary,
+        action: "PASS_HARD_DELETE",
+        success: true,
+        message: reason || "Pass deleted permanently by admin",
+        ipAddress: null,
+        userAgent: `admin:${session.email}`,
       },
     });
 
-    return Response.json(
-      {
-        ok: false,
-        message: "Cannot delete pass because dependent records still exist.",
-        mode,
-        dependencySummary,
-      },
-      { status: 409 },
-    );
-  }
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      await tx.sharePass.delete({
-        where: { id: sharePass.id },
-      });
-
-      await tx.sharePassDeleteLog.create({
-        data: {
-          actorUserId: session.userId,
-          actorEmail: session.email,
-          sharePassId: sharePass.id,
-          sharePassLabel: sharePass.label,
-          sharePageId: sharePass.sharePageId,
-          sharePageCode: sharePass.sharePage.code,
-          appId: sharePass.sharePage.appId,
-          appName: sharePass.sharePage.app?.name || "-",
-          mode,
-          status: "DELETED",
-          reason,
-          dependencySummary,
-        },
-      });
+    await prisma.sharePass.delete({
+      where: { id: sharePass.id },
     });
 
     return Response.json({
       ok: true,
-      message:
-        mode === "FORCE_DELETE"
-          ? "Pass and all dependent records were deleted."
-          : "Pass deleted successfully.",
+      message: "Pass đã được xóa cứng.",
       mode,
       dependencySummary,
     });
   } catch (error) {
-    await prisma.sharePassDeleteLog.create({
-      data: {
-        actorUserId: session.userId,
-        actorEmail: session.email,
-        sharePassId: sharePass.id,
-        sharePassLabel: sharePass.label,
-        sharePageId: sharePass.sharePageId,
-        sharePageCode: sharePass.sharePage.code,
-        appId: sharePass.sharePage.appId,
-        appName: sharePass.sharePage.app?.name || "-",
-        mode,
-        status: "FAILED",
-        reason: reason || String(error?.message || "Unknown delete error"),
-        dependencySummary,
-      },
-    });
-
     return Response.json(
-      { ok: false, message: "Failed to delete pass." },
+      {
+        ok: false,
+        message: "Failed to delete pass.",
+        detail: String(error?.message || error),
+      },
       { status: 500 },
     );
   }

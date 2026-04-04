@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   flexRender,
   getCoreRowModel,
@@ -26,12 +26,11 @@ import {
 } from "@/components/ui/table";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
-import { fetchSharePagePasses } from "../../api/sharePage.api";
+import { fetchShareLinkPasses } from "../../api/shareLink.api";
 import { mapSharePassesToTableRows } from "../../lib/sharePass.table.mapper";
 import { getPassColumns } from "../../table/pass-columns";
 import SharePassCreateModal from "./SharePassCreateModal";
 import SharePassActionModal from "./SharePassActionModal";
-import SharePageAccountManageModal from "./SharePageAccountManageModal";
 import SharePassDeleteModal from "./SharePassDeleteModal";
 
 function fmtDate(value) {
@@ -43,15 +42,14 @@ function fmtDate(value) {
 
 export default function SharePassManageModal({
   open,
-  sharePageId,
+  shareLinkId,
   onOpenChange,
 }) {
   const [loading, setLoading] = useState(false);
-  const [sharePage, setSharePage] = useState(null);
+  const [shareLink, setShareLink] = useState(null);
   const [rows, setRows] = useState([]);
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [accountManageOpen, setAccountManageOpen] = useState(false);
   const [actionModal, setActionModal] = useState({
     open: false,
     mode: "view",
@@ -93,36 +91,36 @@ export default function SharePassManageModal({
     setRows((prev) => prev.filter((item) => item.id !== passId));
   }
 
-  async function loadPasses() {
-    if (!sharePageId) return;
+  const loadPasses = useCallback(async () => {
+    if (!shareLinkId) return;
 
     setLoading(true);
     setError("");
 
     try {
-      const res = await fetchSharePagePasses(sharePageId);
+      const res = await fetchShareLinkPasses(shareLinkId);
       if (!res?.success) {
         setError(res?.message || "Không thể tải danh sách pass");
-        setSharePage(null);
+        setShareLink(null);
         setRows([]);
         return;
       }
 
-      setSharePage(res.sharePage || null);
+      setShareLink(res.shareLink || null);
       setRows(mapSharePassesToTableRows(res.items || []));
     } catch (err) {
       setError(String(err?.message || err));
-      setSharePage(null);
+      setShareLink(null);
       setRows([]);
     } finally {
       setLoading(false);
     }
-  }
+  }, [shareLinkId]);
 
   useEffect(() => {
-    if (!open || !sharePageId) return;
+    if (!open || !shareLinkId) return;
     loadPasses();
-  }, [open, sharePageId]);
+  }, [open, shareLinkId, loadPasses]);
 
   const columns = useMemo(
     () =>
@@ -147,15 +145,15 @@ export default function SharePassManageModal({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex h-[92vh] w-[calc(100vw-1rem)] max-w-6xl flex-col overflow-hidden p-0 sm:h-[90vh] sm:w-[95vw]">
-          <DialogHeader className="border-b px-4 py-4 sm:px-6 sm:py-5">
+        <DialogContent className="w-[min(96vw,78rem)] max-w-6xl overflow-hidden p-0">
+          <DialogHeader className="border-b px-5 py-4 md:px-6">
             <DialogTitle>Quản lý pass</DialogTitle>
             <DialogDescription>
               Quản lý quota và trạng thái của share link đã chọn.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-5">
+          <div className="max-h-[calc(88vh-7rem)] overflow-y-auto px-5 py-5 md:px-6">
             {loading ? (
               <div className="py-10 text-sm text-muted-foreground">
                 Đang tải dữ liệu...
@@ -168,52 +166,44 @@ export default function SharePassManageModal({
               </div>
             ) : null}
 
-            {!loading && !error && sharePage ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-3 text-sm lg:grid-cols-2">
-                  <div className="rounded-lg border p-4">
+            {!loading && !error && shareLink ? (
+              <div className="space-y-5">
+                <div className="grid grid-cols-1 gap-4 text-sm xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                  <div className="rounded-lg border p-4 lg:p-5">
                     <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Share link
                     </div>
-                    <div className="grid grid-cols-[80px_1fr] gap-2 sm:grid-cols-[120px_1fr]">
+                    <div className="grid grid-cols-[92px_1fr] gap-x-4 gap-y-3 sm:grid-cols-[128px_1fr]">
                       <div className="text-muted-foreground">Mã</div>
-                      <div className="break-all font-mono">{sharePage.code}</div>
+                      <div className="break-all font-mono">{shareLink.code}</div>
 
                       <div className="text-muted-foreground">App</div>
-                      <div>{sharePage.app?.name || "-"}</div>
+                      <div>{shareLink.app?.name || "-"}</div>
 
                       <div className="text-muted-foreground">Slug app</div>
-                      <div className="break-all">{sharePage.app?.slug || "-"}</div>
+                      <div className="break-all">{shareLink.app?.slug || "-"}</div>
                     </div>
                   </div>
 
-                  <div className="rounded-lg border p-4">
+                  <div className="rounded-lg border p-4 lg:p-5">
                     <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Chính sách
                     </div>
-                    <div className="grid grid-cols-[80px_1fr] gap-2 sm:grid-cols-[120px_1fr]">
+                    <div className="grid grid-cols-[92px_1fr] gap-x-4 gap-y-3 sm:grid-cols-[128px_1fr]">
                       <div className="text-muted-foreground">Hết hạn</div>
-                      <div>{fmtDate(sharePage.expiresAt)}</div>
+                      <div>{fmtDate(shareLink.expiresAt)}</div>
 
                       <div className="text-muted-foreground">Ghi chú</div>
-                      <div className="break-words">{sharePage.note || "-"}</div>
+                      <div className="break-words">{shareLink.note || "-"}</div>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm text-muted-foreground">
+                <div className="flex flex-col gap-3 rounded-lg border bg-slate-50/50 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="max-w-2xl text-sm text-muted-foreground">
                     Theo dõi trạng thái và thao tác với từng pass từ menu hành động.
                   </div>
                   <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setAccountManageOpen(true)}
-                      className="w-full sm:w-auto"
-                    >
-                      Quản lý tài khoản
-                    </Button>
                     <Button
                       type="button"
                       onClick={() => setCreateOpen(true)}
@@ -224,9 +214,9 @@ export default function SharePassManageModal({
                   </div>
                 </div>
 
-                <div className="overflow-hidden rounded-md border">
-                  <ScrollArea className="h-[52vh] w-full sm:h-[320px]">
-                    <div className="min-w-[760px] pb-2 sm:min-w-[900px]">
+                <div className="overflow-hidden rounded-lg border bg-white">
+                  <ScrollArea className="h-[min(52vh,32rem)] w-full">
+                    <div className="min-w-[980px] pb-2">
                       <Table>
                         <TableHeader>
                           {table.getHeaderGroups().map((headerGroup) => (
@@ -283,14 +273,14 @@ export default function SharePassManageModal({
 
       <SharePassCreateModal
         open={createOpen}
-        sharePageId={sharePageId}
+        shareLinkId={shareLinkId}
         onOpenChange={setCreateOpen}
         onCreated={loadPasses}
       />
 
       <SharePassActionModal
         open={actionModal.open}
-        sharePageId={sharePageId}
+        shareLinkId={shareLinkId}
         mode={actionModal.mode}
         pass={actionModal.pass}
         onOpenChange={(nextOpen) =>
@@ -304,17 +294,10 @@ export default function SharePassManageModal({
         onToast={showToast}
       />
 
-      <SharePageAccountManageModal
-        open={accountManageOpen}
-        sharePageId={sharePageId}
-        onOpenChange={setAccountManageOpen}
-        onToast={showToast}
-      />
-
       <SharePassDeleteModal
         open={deleteModal.open}
-        sharePageId={sharePageId}
-        sharePageCode={sharePage?.code || ""}
+        shareLinkId={shareLinkId}
+        shareLinkCode={shareLink?.code || ""}
         pass={deleteModal.pass}
         onOpenChange={(nextOpen) =>
           setDeleteModal((prev) => ({

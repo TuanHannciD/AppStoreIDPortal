@@ -1,7 +1,9 @@
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { prisma } from "../../../lib/prisma";
-import { isAdminRole, normalizeEmail, sha256 } from "@/lib/admin-auth";
+import { sha256 } from "@/lib/admin-auth";
+import { isAdminRole, normalizeEmail } from "@/lib/admin-auth-shared";
 import {
   createAdminAccessToken,
   JWT_EXPIRES_IN_SEC,
@@ -11,6 +13,24 @@ import {
 function safeEqual(a, b) {
   if (!a || !b || a.length !== b.length) return false;
   return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
+async function verifyAdminPassword(inputPassword, storedPassword) {
+  const normalizedStoredPassword = String(storedPassword || "");
+
+  if (!normalizedStoredPassword) {
+    return false;
+  }
+
+  // Ho tro ca hash bcrypt moi va hash sha256 cu de khong lam vo tai khoan da ton tai.
+  if (normalizedStoredPassword.startsWith("$2a$")
+    || normalizedStoredPassword.startsWith("$2b$")
+    || normalizedStoredPassword.startsWith("$2y$")) {
+    return bcrypt.compare(inputPassword, normalizedStoredPassword);
+  }
+
+  const hashed = sha256(inputPassword);
+  return safeEqual(normalizedStoredPassword, hashed);
 }
 
 export async function POST(req) {
@@ -38,8 +58,8 @@ export async function POST(req) {
       );
     }
 
-    const hashed = sha256(password);
-    if (!safeEqual(user.password, hashed)) {
+    const passwordMatched = await verifyAdminPassword(password, user.password);
+    if (!passwordMatched) {
       return NextResponse.json(
         { ok: false, message: "Invalid email or password." },
         { status: 401 },

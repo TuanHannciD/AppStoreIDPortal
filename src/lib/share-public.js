@@ -18,9 +18,9 @@ export function getRemainingQuota(sharePass) {
 /**
  * Kiểm tra SharePage đã hết hạn chưa.
  */
-export function isSharePageExpired(sharePage) {
-  if (!sharePage?.expiresAt) return false;
-  return new Date(sharePage.expiresAt).getTime() < Date.now();
+export function isShareLinkExpired(shareLink) {
+  if (!shareLink?.expiresAt) return false;
+  return new Date(shareLink.expiresAt).getTime() < Date.now();
 }
 
 /**
@@ -83,12 +83,10 @@ export function getRequestMeta(req) {
 export async function createShareAuthLog(prisma, data) {
   return prisma.shareAuthLog.create({
     data: {
-      sharePageId: data.sharePageId ?? null,
-      sharePageCode: data.sharePageCode ?? null,
+      shareLinkId: data.shareLinkId ?? data.sharePageId ?? null,
+      shareLinkCode: data.shareLinkCode ?? data.sharePageCode ?? null,
       sharePassId: data.sharePassId ?? null,
       sharePassLabel: data.sharePassLabel ?? null,
-      appId: data.appId ?? null,
-      appName: data.appName ?? null,
       action: data.action,
       success: Boolean(data.success),
       message: data.message ?? null,

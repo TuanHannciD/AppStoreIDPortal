@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { verifyShareAccessToken } from "@/lib/share-access-token";
 import {
   createShareAuthLog,
   getRemainingQuota,
   getRequestMeta,
-  isSharePageExpired,
+  isShareLinkExpired,
   isSharePassExpired,
   isSharePassRevoked,
 } from "@/lib/share-public";
@@ -33,29 +34,9 @@ export async function POST(req, { params }) {
       );
     }
 
-    const { verificationToken } = parsed.data;
+    const tokenPayload = verifyShareAccessToken(parsed.data.verificationToken);
 
-    const verification = await prisma.sharePassVerification.findUnique({
-      where: { token: verificationToken },
-      include: {
-        sharePage: {
-          include: {
-            app: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                packageType: true,
-                description: true,
-              },
-            },
-          },
-        },
-        sharePass: true,
-      },
-    });
-
-    if (!verification) {
+    if (!tokenPayload || tokenPayload.code !== code) {
       return Response.json(
         {
           success: false,
@@ -66,18 +47,30 @@ export async function POST(req, { params }) {
       );
     }
 
-    if (verification.sharePage.code !== code) {
+    const shareLink = await prisma.shareLink.findUnique({
+      where: { id: tokenPayload.shareLinkId },
+    });
+    const sharePass = await prisma.sharePass.findUnique({
+      where: { id: tokenPayload.sharePassId },
+    });
+
+    if (!shareLink || !sharePass || sharePass.shareLinkId !== shareLink.id) {
       return Response.json(
         {
           success: false,
           status: "TOKEN_INVALID",
-          message: "Verification token does not match this share link",
+          message: "Verification token is invalid",
         },
         { status: 401 },
       );
     }
 
-    if (verification.consumedAt) {
+    const tokenIssuedAt = new Date(tokenPayload.issuedAt * 1000);
+
+    if (
+      sharePass.lastRevealedAt
+      && new Date(sharePass.lastRevealedAt).getTime() >= tokenIssuedAt.getTime()
+    ) {
       return Response.json(
         {
           success: false,
@@ -88,34 +81,18 @@ export async function POST(req, { params }) {
       );
     }
 
-    if (new Date(verification.expiresAt).getTime() < Date.now()) {
+    if (isShareLinkExpired(shareLink)) {
       await createShareAuthLog(prisma, {
-        sharePageId: verification.sharePageId,
-        sharePageCode: verification.sharePage.code,
-        sharePassId: verification.sharePassId,
-        sharePassLabel: verification.sharePass.label,
-        appId: verification.sharePage.app.id,
-        appName: verification.sharePage.app.name,
-        action: "TOKEN_EXPIRED",
+        shareLinkId: shareLink.id,
+        shareLinkCode: shareLink.code,
+        sharePassId: sharePass.id,
+        sharePassLabel: sharePass.label,
+        action: "LINK_EXPIRED",
         success: false,
-        message: "Verification token expired at validate step",
+        message: "Verification token blocked because share link expired",
         ...meta,
       });
 
-      return Response.json(
-        {
-          success: false,
-          status: "TOKEN_EXPIRED",
-          message: "Verification token has expired",
-        },
-        { status: 410 },
-      );
-    }
-
-    const sharePage = verification.sharePage;
-    const sharePass = verification.sharePass;
-
-    if (isSharePageExpired(sharePage)) {
       return Response.json(
         {
           success: false,
@@ -163,8 +140,8 @@ export async function POST(req, { params }) {
     return Response.json({
       success: true,
       status: "TOKEN_VALID",
-      verificationToken,
-      expiresAt: verification.expiresAt,
+      verificationToken: parsed.data.verificationToken,
+      expiresAt: new Date(tokenPayload.expiresAt * 1000).toISOString(),
       passInfo: {
         id: sharePass.id,
         label: sharePass.label,

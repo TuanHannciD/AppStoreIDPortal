@@ -1,12 +1,12 @@
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { createShareAccessToken } from "@/lib/share-access-token";
 import {
   createShareAuthLog,
-  generateVerificationToken,
   getRemainingQuota,
   getRequestMeta,
-  isSharePageExpired,
+  isShareLinkExpired,
   isSharePassExpired,
   isSharePassRevoked,
 } from "@/lib/share-public";
@@ -15,15 +15,6 @@ const VerifyPassSchema = z.object({
   pass: z.string().min(1).max(128),
 });
 
-/**
- * POST /api/share-pages/by-code/[code]/verify
- *
- * Mục đích:
- * - Xác thực pass
- * - Chưa trả account info
- * - Chưa trừ quota theo flow mới
- * - Tạo verification token ngắn hạn cho bước reveal
- */
 export async function POST(req, { params }) {
   try {
     const { code } = params;
@@ -46,27 +37,16 @@ export async function POST(req, { params }) {
 
     const rawPass = parsed.data.pass;
 
-    const sharePage = await prisma.sharePage.findUnique({
+    const shareLink = await prisma.shareLink.findUnique({
       where: { code },
       include: {
-        app: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            packageType: true,
-            description: true,
-          },
-        },
         passes: {
-          orderBy: {
-            createdAt: "desc",
-          },
+          orderBy: { createdAt: "desc" },
         },
       },
     });
 
-    if (!sharePage) {
+    if (!shareLink) {
       return Response.json(
         {
           success: false,
@@ -77,12 +57,10 @@ export async function POST(req, { params }) {
       );
     }
 
-    if (isSharePageExpired(sharePage)) {
+    if (isShareLinkExpired(shareLink)) {
       await createShareAuthLog(prisma, {
-        sharePageId: sharePage.id,
-        sharePageCode: sharePage.code,
-        appId: sharePage.app.id,
-        appName: sharePage.app.name,
+        shareLinkId: shareLink.id,
+        shareLinkCode: shareLink.code,
         action: "LINK_EXPIRED",
         success: false,
         message: "Verify blocked because share link expired",
@@ -99,11 +77,9 @@ export async function POST(req, { params }) {
       );
     }
 
-    // Tìm pass khớp bằng cách compare hash từng pass
-    // Vì đang lưu passwordHash nên không thể query trực tiếp theo pass plaintext.
     let matchedPass = null;
 
-    for (const item of sharePage.passes) {
+    for (const item of shareLink.passes) {
       const ok = await bcrypt.compare(rawPass, item.passwordHash);
       if (ok) {
         matchedPass = item;
@@ -111,13 +87,10 @@ export async function POST(req, { params }) {
       }
     }
 
-    // Không tìm được pass đúng
     if (!matchedPass) {
       await createShareAuthLog(prisma, {
-        sharePageId: sharePage.id,
-        sharePageCode: sharePage.code,
-        appId: sharePage.app.id,
-        appName: sharePage.app.name,
+        shareLinkId: shareLink.id,
+        shareLinkCode: shareLink.code,
         action: "INVALID_PASS",
         success: false,
         message: "Invalid pass",
@@ -134,15 +107,12 @@ export async function POST(req, { params }) {
       );
     }
 
-    // Pass bị revoke
     if (isSharePassRevoked(matchedPass)) {
       await createShareAuthLog(prisma, {
-        sharePageId: sharePage.id,
-        sharePageCode: sharePage.code,
+        shareLinkId: shareLink.id,
+        shareLinkCode: shareLink.code,
         sharePassId: matchedPass.id,
         sharePassLabel: matchedPass.label,
-        appId: sharePage.app.id,
-        appName: sharePage.app.name,
         action: "PASS_REVOKED",
         success: false,
         message: matchedPass.reason || "Pass revoked",
@@ -159,15 +129,12 @@ export async function POST(req, { params }) {
       );
     }
 
-    // Pass hết hạn riêng
     if (isSharePassExpired(matchedPass)) {
       await createShareAuthLog(prisma, {
-        sharePageId: sharePage.id,
-        sharePageCode: sharePage.code,
+        shareLinkId: shareLink.id,
+        shareLinkCode: shareLink.code,
         sharePassId: matchedPass.id,
         sharePassLabel: matchedPass.label,
-        appId: sharePage.app.id,
-        appName: sharePage.app.name,
         action: "PASS_EXPIRED",
         success: false,
         message: "Pass expired",
@@ -188,12 +155,10 @@ export async function POST(req, { params }) {
 
     if (remainingQuota <= 0) {
       await createShareAuthLog(prisma, {
-        sharePageId: sharePage.id,
-        sharePageCode: sharePage.code,
+        shareLinkId: shareLink.id,
+        shareLinkCode: shareLink.code,
         sharePassId: matchedPass.id,
         sharePassLabel: matchedPass.label,
-        appId: sharePage.app.id,
-        appName: sharePage.app.name,
         action: "QUOTA_BLOCK",
         success: false,
         message: "Quota exhausted",
@@ -210,21 +175,13 @@ export async function POST(req, { params }) {
       );
     }
 
-    /**
-     * Flow mới:
-     * - verify chỉ tạo token
-     * - chưa consume quota
-     *
-     * Nếu sau này bạn muốn support flow cũ bằng consumeOnVerify = true
-     * thì có thể xử lý riêng ở đây.
-     *
-     * Hiện tại vẫn tạo token để bước reveal dùng chung.
-     */
-    const token = generateVerificationToken();
-    const tokenExpiresAt = new Date(Date.now() + 30 * 1000); // 30s
+    const { token, expiresAt } = createShareAccessToken({
+      shareLinkId: shareLink.id,
+      sharePassId: matchedPass.id,
+      code: shareLink.code,
+    });
 
     await prisma.$transaction(async (tx) => {
-      // update thời điểm verify gần nhất
       await tx.sharePass.update({
         where: { id: matchedPass.id },
         data: {
@@ -232,23 +189,11 @@ export async function POST(req, { params }) {
         },
       });
 
-      // tạo verification token
-      await tx.sharePassVerification.create({
-        data: {
-          token,
-          sharePageId: sharePage.id,
-          sharePassId: matchedPass.id,
-          expiresAt: tokenExpiresAt,
-        },
-      });
-
       await createShareAuthLog(tx, {
-        sharePageId: sharePage.id,
-        sharePageCode: sharePage.code,
+        shareLinkId: shareLink.id,
+        shareLinkCode: shareLink.code,
         sharePassId: matchedPass.id,
         sharePassLabel: matchedPass.label,
-        appId: sharePage.app.id,
-        appName: sharePage.app.name,
         action: "VERIFY_PASS",
         success: true,
         message: "Pass verified successfully",
@@ -260,6 +205,7 @@ export async function POST(req, { params }) {
       success: true,
       status: "VERIFIED",
       verificationToken: token,
+      expiresAt,
       passInfo: {
         id: matchedPass.id,
         label: matchedPass.label,
@@ -268,21 +214,20 @@ export async function POST(req, { params }) {
         remainingQuota,
       },
       item: {
-        code: sharePage.code,
-        note: sharePage.note,
-        expiresAt: sharePage.expiresAt,
-        consumeOnVerify: sharePage.consumeOnVerify,
+        code: shareLink.code,
+        note: shareLink.note,
+        expiresAt: shareLink.expiresAt,
+        consumeOnVerify: shareLink.consumeOnVerify,
         app: {
-          id: sharePage.app.id,
-          name: sharePage.app.name,
-          slug: sharePage.app.slug,
-          packageType: sharePage.app.packageType,
-          description: sharePage.app.description,
+          id: shareLink.id,
+          name: shareLink.appLabel,
+          slug: "-",
+          packageType: "-",
+          description: shareLink.appDescription,
         },
       },
     });
   } catch (err) {
-    console.error("[verify] fatal error:", err);
     return Response.json(
       {
         success: false,

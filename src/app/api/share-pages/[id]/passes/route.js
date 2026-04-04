@@ -7,28 +7,18 @@ import {
   isSharePassRevoked,
 } from "@/lib/share-public";
 import { getSharePassStatus } from "@/features/share-pages/lib/pass-status";
+import { parsePassFileContent } from "@/features/share-pages/lib/passBulk";
 
-/**
- * File API này xử lý danh sách pass của một share page.
- *
- * Vai trò:
- * - `GET`: trả danh sách pass để admin hiển thị trong Manage Passes
- * - `POST`: tạo pass mới cho share page
- *
- * Đây là route ở tầng "admin management", khác với các route public
- * `verify` / `reveal` dùng cho người dùng cuối.
- */
-
-const CreatePassSchema = z.object({
+const CreatePassItemSchema = z.object({
   pass: z.string().min(1).max(128),
-  quota: z.number().int().min(1),
+  quota: z.coerce.number().int().min(1),
   label: z.string().max(120).optional().nullable(),
 });
 
-/**
- * Convert raw SharePass row thành shape dễ dùng ở bảng admin.
- * Mình giữ mapping này ở server để client không phải tự đoán status.
- */
+const CreatePassBatchSchema = z.object({
+  passes: z.array(CreatePassItemSchema).min(1),
+});
+
 function mapPassItem(pass) {
   return {
     ...pass,
@@ -39,41 +29,39 @@ function mapPassItem(pass) {
   };
 }
 
+function normalizeCreatePayload(body) {
+  if (Array.isArray(body?.passes)) {
+    return body;
+  }
+
+  return {
+    passes: [body],
+  };
+}
+
 export async function GET(_req, { params }) {
-  /**
-   * Lấy toàn bộ pass của một share page để render ở admin.
-   *
-   * Ở đây server trả luôn:
-   * - quotaRemaining
-   * - status
-   * - revoked/expired flags
-   *
-   * để client chỉ việc hiển thị.
-   */
   try {
-    const sharePage = await prisma.sharePage.findUnique({
+    const shareLink = await prisma.shareLink.findUnique({
       where: { id: params.id },
-      include: {
-        app: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            packageType: true,
-          },
-        },
+      select: {
+        id: true,
+        code: true,
+        note: true,
+        expiresAt: true,
+        appLabel: true,
+        appDescription: true,
       },
     });
 
-    if (!sharePage) {
+    if (!shareLink) {
       return Response.json(
-        { success: false, message: "Share page not found" },
+        { success: false, message: "Share link not found" },
         { status: 404 },
       );
     }
 
     const passes = await prisma.sharePass.findMany({
-      where: { sharePageId: params.id },
+      where: { shareLinkId: params.id },
       select: {
         id: true,
         label: true,
@@ -94,12 +82,16 @@ export async function GET(_req, { params }) {
 
     return Response.json({
       success: true,
-      sharePage: {
-        id: sharePage.id,
-        code: sharePage.code,
-        note: sharePage.note,
-        expiresAt: sharePage.expiresAt,
-        app: sharePage.app,
+      shareLink: {
+        id: shareLink.id,
+        code: shareLink.code,
+        note: shareLink.note,
+        expiresAt: shareLink.expiresAt,
+        app: {
+          name: shareLink.appLabel,
+          slug: "-",
+          description: shareLink.appDescription ?? null,
+        },
       },
       items: passes.map(mapPassItem),
     });
@@ -116,23 +108,9 @@ export async function GET(_req, { params }) {
 }
 
 export async function POST(req, { params }) {
-  /**
-   * Tạo một pass mới.
-   *
-   * Flow:
-   * 1. validate payload
-   * 2. kiểm tra share page có tồn tại không
-   * 3. hash plaintext pass
-   * 4. lưu DB
-   * 5. trả item đã được map sẵn cho UI
-   *
-   * Lưu ý:
-   * - không lưu plaintext pass vào DB
-   * - chỉ lưu `passwordHash`
-   */
   try {
     const body = await req.json();
-    const parsed = CreatePassSchema.safeParse(body);
+    const parsed = CreatePassBatchSchema.safeParse(normalizeCreatePayload(body));
 
     if (!parsed.success) {
       return Response.json(
@@ -145,45 +123,75 @@ export async function POST(req, { params }) {
       );
     }
 
-    const sharePage = await prisma.sharePage.findUnique({
+    const passValidation = parsePassFileContent(
+      parsed.data.passes
+        .map((item) => `${item.pass}|${item.quota}|${item.label || ""}`)
+        .join("\n"),
+    );
+
+    if (!passValidation.ok) {
+      return Response.json(
+        {
+          success: false,
+          message: passValidation.message,
+        },
+        { status: 400 },
+      );
+    }
+
+    const shareLink = await prisma.shareLink.findUnique({
       where: { id: params.id },
       select: { id: true },
     });
 
-    if (!sharePage) {
+    if (!shareLink) {
       return Response.json(
-        { success: false, message: "Share page not found" },
+        { success: false, message: "Share link not found" },
         { status: 404 },
       );
     }
 
-    const passHash = await bcrypt.hash(parsed.data.pass, 10);
+    const createdItems = await prisma.$transaction(async (tx) => {
+      const nextItems = [];
 
-    const created = await prisma.sharePass.create({
-      data: {
-        sharePageId: params.id,
-        passwordHash: passHash,
-        label: parsed.data.label ?? null,
-        quotaTotal: parsed.data.quota,
-      },
-      select: {
-        id: true,
-        label: true,
-        quotaTotal: true,
-        quotaUsed: true,
-        revokedAt: true,
-        reason: true,
-        expiresAt: true,
-        lastVerifiedAt: true,
-        lastRevealedAt: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      for (const item of parsed.data.passes) {
+        const passwordHash = await bcrypt.hash(item.pass, 10);
+
+        const created = await tx.sharePass.create({
+          data: {
+            shareLinkId: params.id,
+            passwordHash,
+            label: item.label ?? null,
+            quotaTotal: item.quota,
+          },
+          select: {
+            id: true,
+            label: true,
+            quotaTotal: true,
+            quotaUsed: true,
+            revokedAt: true,
+            reason: true,
+            expiresAt: true,
+            lastVerifiedAt: true,
+            lastRevealedAt: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
+
+        nextItems.push(created);
+      }
+
+      return nextItems;
     });
+
+    const items = createdItems.map(mapPassItem);
 
     return Response.json({
       success: true,
-      item: mapPassItem(created),
+      item: items[0] ?? null,
+      items,
+      createdCount: items.length,
     });
   } catch (err) {
     return Response.json(

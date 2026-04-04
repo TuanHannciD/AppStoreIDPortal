@@ -1,16 +1,10 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import {
   SESSION_COOKIE_NAME,
   verifyAdminAccessToken,
 } from "@/lib/admin-session";
 
-const ADMIN_API_PREFIXES = ["/api/apps", "/api/account-sources"];
-
 function isProtectedAdminApi(pathname) {
-  if (ADMIN_API_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
-    return true;
-  }
-
   if (!pathname.startsWith("/api/share-pages")) {
     return false;
   }
@@ -62,7 +56,5 @@ export const config = {
   matcher: [
     "/admin/:path*",
     "/api/share-pages/:path*",
-    "/api/apps/:path*",
-    "/api/account-sources/:path*",
   ],
 };

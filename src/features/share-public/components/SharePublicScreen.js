@@ -83,7 +83,7 @@ export default function SharePublicScreen({ code }) {
   useEffect(() => {
     let ignore = false;
 
-    async function loadSharePage() {
+    async function loadShareLink() {
       setLoading(true);
       setLoadStatus("LOADING");
       setLoadError("");
@@ -159,7 +159,7 @@ export default function SharePublicScreen({ code }) {
       }
     }
 
-    loadSharePage();
+    loadShareLink();
 
     return () => {
       ignore = true;

@@ -2,40 +2,19 @@ import { prisma } from "@/lib/prisma";
 import {
   createShareAuthLog,
   getRequestMeta,
-  isSharePageExpired,
+  isShareLinkExpired,
 } from "@/lib/share-public";
 
-/**
- * GET /api/share-pages/by-code/[code]
- *
- * Mục đích:
- * - Dùng cho public page khi user mở link share
- * - Chỉ trả metadata public tối thiểu
- * - Chưa verify pass
- * - Chưa trừ quota
- */
 export async function GET(req, { params }) {
   try {
     const { code } = params;
     const meta = getRequestMeta(req);
 
-    const sharePage = await prisma.sharePage.findUnique({
+    const shareLink = await prisma.shareLink.findUnique({
       where: { code },
-      include: {
-        app: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            packageType: true,
-            description: true,
-          },
-        },
-      },
     });
 
-    // Link không tồn tại
-    if (!sharePage) {
+    if (!shareLink) {
       return Response.json(
         {
           success: false,
@@ -46,13 +25,10 @@ export async function GET(req, { params }) {
       );
     }
 
-    // Link hết hạn
-    if (isSharePageExpired(sharePage)) {
+    if (isShareLinkExpired(shareLink)) {
       await createShareAuthLog(prisma, {
-        sharePageId: sharePage.id,
-        sharePageCode: sharePage.code,
-        appId: sharePage.app.id,
-        appName: sharePage.app.name,
+        shareLinkId: shareLink.id,
+        shareLinkCode: shareLink.code,
         action: "LINK_EXPIRED",
         success: false,
         message: "Share link expired",
@@ -69,12 +45,9 @@ export async function GET(req, { params }) {
       );
     }
 
-    // Có thể log trạng thái link sẵn sàng nếu bạn muốn audit nhẹ
     await createShareAuthLog(prisma, {
-      sharePageId: sharePage.id,
-      sharePageCode: sharePage.code,
-      appId: sharePage.app.id,
-      appName: sharePage.app.name,
+      shareLinkId: shareLink.id,
+      shareLinkCode: shareLink.code,
       action: "LINK_READY",
       success: true,
       message: "Public metadata loaded",
@@ -85,16 +58,16 @@ export async function GET(req, { params }) {
       success: true,
       status: "READY",
       item: {
-        code: sharePage.code,
-        note: sharePage.note,
-        expiresAt: sharePage.expiresAt,
-        consumeOnVerify: sharePage.consumeOnVerify,
+        code: shareLink.code,
+        note: shareLink.note,
+        expiresAt: shareLink.expiresAt,
+        consumeOnVerify: shareLink.consumeOnVerify,
         app: {
-          id: sharePage.app.id,
-          name: sharePage.app.name,
-          slug: sharePage.app.slug,
-          packageType: sharePage.app.packageType,
-          description: sharePage.app.description,
+          id: shareLink.id,
+          name: shareLink.appLabel,
+          slug: "-",
+          packageType: "-",
+          description: shareLink.appDescription,
         },
       },
     });

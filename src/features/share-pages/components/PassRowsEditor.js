@@ -30,7 +30,7 @@ export default function PassRowsEditor({
 
   return (
     <div className="rounded-2xl border border-neutral-800 p-4 space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-semibold">Passes & Quota</div>
           <div className="text-xs text-neutral-400">
@@ -42,7 +42,7 @@ export default function PassRowsEditor({
           <button
             type="button"
             onClick={() => fileInputRef?.current?.click()}
-            className="px-3 py-2 text-sm rounded-xl border border-neutral-700 hover:bg-neutral-400"
+            className="w-full rounded-xl border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-400 sm:w-auto"
           >
             Chọn file txt
           </button>
@@ -64,7 +64,7 @@ export default function PassRowsEditor({
           </div>
 
           {passFile ? (
-            <div className="rounded-xl border border-neutral-700 bg-neutral-950/30 p-3 flex items-center justify-between gap-3">
+            <div className="flex flex-col gap-3 rounded-xl border border-neutral-700 bg-neutral-950/30 p-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="min-w-0">
                 <div className="text-sm font-medium truncate">{passFile.name}</div>
                 <div className="text-xs text-neutral-400">
@@ -72,18 +72,18 @@ export default function PassRowsEditor({
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <button
                   type="button"
                   onClick={() => fileInputRef?.current?.click()}
-                  className="px-3 py-2 text-sm rounded-xl border border-neutral-700 hover:bg-neutral-400"
+                  className="w-full rounded-xl border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-400 sm:w-auto"
                 >
                   Gắn lại file
                 </button>
                 <button
                   type="button"
                   onClick={onPassFileRemove}
-                  className="px-3 py-2 text-sm rounded-xl border border-neutral-700 hover:bg-neutral-400"
+                  className="w-full rounded-xl border border-neutral-700 px-3 py-2 text-sm hover:bg-neutral-400 sm:w-auto"
                 >
                   Gỡ file
                 </button>

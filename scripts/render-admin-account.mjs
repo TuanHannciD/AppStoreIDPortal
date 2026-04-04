@@ -3,10 +3,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createAdminUserRecord,
-  isAdminRole,
-  normalizeEmail,
   renderAdminUserSql,
 } from "../src/lib/admin-auth.js";
+import { isAdminRole, normalizeEmail } from "../src/lib/admin-auth-shared.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -54,7 +53,7 @@ async function main() {
     return;
   }
 
-  const record = createAdminUserRecord({ email, password, role });
+  const record = await createAdminUserRecord({ email, password, role });
   const output =
     format === "sql"
       ? renderAdminUserSql(record)

@@ -4,10 +4,18 @@ on:
   push:
     branches:
       - main
+      - customer
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+    outputs:
+      has_customer_migration: ${{ steps.customer_prisma_changes.outputs.has_customer_migration }}
 
     steps:
       - name: Checkout source
@@ -24,30 +32,162 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - name: Create .env file
+      - name: Create .env file for main
+        if: github.ref_name == 'main'
         run: |
           cat > .env << 'EOF'
           ${{ secrets.ENV_FILE_APPSTOREIDPORTAL }}
           EOF
 
+      - name: Create .env file for customer
+        if: github.ref_name == 'customer'
+        run: |
+          cat > .env << 'EOF'
+          ${{ secrets.ENV_FILE_APPSTOREIDPORTAL_CUSTOMER }}
+          EOF
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Detect customer Prisma migration changes
+        id: customer_prisma_changes
+        if: github.ref_name == 'customer'
+        run: |
+          if git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep '^prisma/migrations/' >/dev/null; then
+            echo "has_customer_migration=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_customer_migration=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ensure customer schema changes include migration
+        if: github.ref_name == 'customer'
+        run: |
+          SCHEMA_CHANGED=false
+          MIGRATION_CHANGED=false
+
+          if git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep '^prisma/schema.prisma$' >/dev/null; then
+            SCHEMA_CHANGED=true
+          fi
+
+          if git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep '^prisma/migrations/' >/dev/null; then
+            MIGRATION_CHANGED=true
+          fi
+
+          if [ "$SCHEMA_CHANGED" = "true" ] && [ "$MIGRATION_CHANGED" = "false" ]; then
+            echo "schema.prisma changed but no migration was committed"
+            exit 1
+          fi
 
       - name: Build project
         run: pnpm run build
 
-  deploy:
+  deploy-main:
+    if: github.ref_name == 'main'
     runs-on: ubuntu-latest
     needs: verify
 
     steps:
-      - name: Deploy to server via SSH
+      - name: Deploy main app to server
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_NAME: AppStoreIDPortal
+          APP_PATH: /www/wwwroot/AppStoreIDPortal
+          APP_PORT: "3000"
+          DEPLOY_BRANCH: main
+          SOURCE_REPO_PATH: /www/wwwroot/AppStoreIDPortal
+          SERVER_ENV_FILE: ${{ secrets.ENV_FILE_APPSTOREIDPORTAL }}
         with:
           host: ${{ secrets.HOST_APPSTOREIDPORTAL }}
           username: ${{ secrets.USERNAME_APPSTOREIDPORTAL }}
           port: ${{ secrets.PORT_APPSTOREIDPORTAL }}
           key: ${{ secrets.SSH_KEY_APPSTOREIDPORTAL }}
+          envs: APP_NAME,APP_PATH,APP_PORT,DEPLOY_BRANCH,SOURCE_REPO_PATH,SERVER_ENV_FILE
           script: |
-            cd /www/wwwroot/AppStoreIDPortal
-            ./deploy.sh
+            set -e
+
+            if [ ! -d "$APP_PATH/.git" ]; then
+              echo "Missing git repository at $APP_PATH"
+              exit 1
+            fi
+
+            cd "$APP_PATH"
+
+            git fetch origin
+            git checkout "$DEPLOY_BRANCH"
+            git reset --hard "origin/$DEPLOY_BRANCH"
+
+            cat > .env <<EOF
+            $SERVER_ENV_FILE
+            EOF
+
+            pnpm install --frozen-lockfile
+            pnpm run build
+
+            if pm2 describe "$APP_NAME" >/dev/null 2>&1; then
+              PORT="$APP_PORT" HOSTNAME=0.0.0.0 pm2 restart "$APP_NAME" --update-env
+            else
+              PORT="$APP_PORT" HOSTNAME=0.0.0.0 pm2 start pnpm --name "$APP_NAME" --cwd "$APP_PATH" -- start
+            fi
+
+            pm2 save
+
+  deploy-customer:
+    if: github.ref_name == 'customer'
+    runs-on: ubuntu-latest
+    needs: verify
+
+    steps:
+      - name: Deploy customer app to server
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          APP_NAME: AppStoreIDPortalCustomer
+          APP_PATH: /www/wwwroot/AppStoreIDPortal-customer
+          APP_PORT: "3001"
+          DEPLOY_BRANCH: customer
+          SOURCE_REPO_PATH: /www/wwwroot/AppStoreIDPortal
+          SERVER_ENV_FILE: ${{ secrets.ENV_FILE_APPSTOREIDPORTAL_CUSTOMER }}
+          HAS_CUSTOMER_MIGRATION: ${{ needs.verify.outputs.has_customer_migration }}
+        with:
+          host: ${{ secrets.HOST_APPSTOREIDPORTAL }}
+          username: ${{ secrets.USERNAME_APPSTOREIDPORTAL }}
+          port: ${{ secrets.PORT_APPSTOREIDPORTAL }}
+          key: ${{ secrets.SSH_KEY_APPSTOREIDPORTAL }}
+          envs: APP_NAME,APP_PATH,APP_PORT,DEPLOY_BRANCH,SOURCE_REPO_PATH,SERVER_ENV_FILE,HAS_CUSTOMER_MIGRATION
+          script: |
+            set -e
+
+            if [ ! -d "$APP_PATH/.git" ]; then
+              git clone "$SOURCE_REPO_PATH" "$APP_PATH"
+            fi
+
+            cd "$APP_PATH"
+
+            git fetch origin
+
+            if git show-ref --verify --quiet "refs/heads/$DEPLOY_BRANCH"; then
+              git checkout "$DEPLOY_BRANCH"
+            else
+              git checkout -b "$DEPLOY_BRANCH" "origin/$DEPLOY_BRANCH"
+            fi
+
+            git reset --hard "origin/$DEPLOY_BRANCH"
+
+            cat > .env <<EOF
+            $SERVER_ENV_FILE
+            EOF
+
+            pnpm install --frozen-lockfile
+
+            if [ "$HAS_CUSTOMER_MIGRATION" = "true" ]; then
+              pnpm prisma migrate deploy
+            fi
+
+            pnpm run build
+
+            if pm2 describe "$APP_NAME" >/dev/null 2>&1; then
+              PORT="$APP_PORT" HOSTNAME=0.0.0.0 pm2 restart "$APP_NAME" --update-env
+            else
+              PORT="$APP_PORT" HOSTNAME=0.0.0.0 pm2 start pnpm --name "$APP_NAME" --cwd "$APP_PATH" -- start
+            fi
+
+            pm2 save

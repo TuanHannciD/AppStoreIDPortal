@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { isAdminRole } from "@/lib/admin-auth";
+import { isAdminRole } from "@/lib/admin-auth-shared";
 
 export const SESSION_COOKIE_NAME = "admin_access_token";
 export const JWT_ALGORITHM = process.env.AUTH_JWT_ALGORITHM || "HS256";

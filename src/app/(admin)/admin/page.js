@@ -5,30 +5,23 @@ const featureCards = [
   {
     title: "Quản lý Share Links",
     description:
-      "Theo dõi danh sách link chia sẻ, kiểm tra trạng thái, quota và mở nhanh các hành động quản trị cần thiết.",
+      "Theo dõi danh sách share link, kiểm tra trạng thái, quota và mở nhanh các hành động quản trị cần thiết.",
     href: "/admin/share-pages",
     cta: "Mở danh sách share links",
   },
   {
     title: "Tạo Share Link mới",
     description:
-      "Tạo nhanh một trang chia sẻ mới, cấu hình thời hạn, quota mặc định và các thông số phục vụ luồng cấp quyền.",
-    href: "/admin/share-pages/new",
+      "Tạo nhanh share link mới, cấu hình thời hạn, link API nguồn và danh sách pass cho người dùng.",
+    href: "/admin/share-pages?create=1",
     cta: "Tạo share link",
-  },
-  {
-    title: "Quản lý App Accounts",
-    description:
-      "Quản trị danh sách tài khoản thật của từng app để gắn vào share page và kiểm soát dữ liệu nội bộ tốt hơn.",
-    href: "/admin/accounts",
-    cta: "Mở danh sách tài khoản",
   },
 ];
 
 const quickGuides = [
   {
     title: "Bắt đầu từ đâu",
-    body: "Nếu đang thiết lập mới, hãy tạo app account trước, sau đó tạo share link và gắn account phù hợp vào share page.",
+    body: "Nếu đang thiết lập mới, hãy tạo share link trước, sau đó nhập link API nguồn và cấu hình danh sách pass phù hợp.",
   },
   {
     title: "Quản lý pass",
@@ -42,7 +35,7 @@ const quickGuides = [
 
 export default async function AdminHomePage() {
   const currentAdmin = await getCurrentAdminSession();
-  const welcomeName = currentAdmin?.email || "quản trị viên";
+  const welcomeName = currentAdmin?.email || "quan tri vien";
 
   return (
     <div className="space-y-6">
@@ -55,9 +48,8 @@ export default async function AdminHomePage() {
             Chào mừng, {welcomeName}
           </h1>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-200 sm:text-base">
-            Đây là khu vực quản trị trung tâm của hệ thống App Store ID Portal.
-            Từ đây bạn có thể quản lý share link, pass truy cập và các tài khoản
-            app nội bộ đang được phân phối cho từng luồng chia sẻ.
+            Đây là khu vực quản trị trung tâm của hệ thống. Từ đây bạn có thể quản lý
+            share link, pass truy cập và luồng reveal tài khoản qua API ngoài.
           </p>
         </div>
 
@@ -71,15 +63,15 @@ export default async function AdminHomePage() {
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-sm font-semibold text-slate-900">Mục tiêu hệ thống</div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Tổ chức việc chia sẻ account theo app, theo share page và theo pass
-              để dễ kiểm soát quota cũng như lịch sử sử dụng.
+              Tổ chức việc chia sẻ account qua share link và pass để dễ kiểm soát quota,
+              thời hạn và log reveal từ API ngoài.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div className="text-sm font-semibold text-slate-900">Cách làm việc</div>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              Dùng menu bên trái để điều hướng nhanh giữa các màn hình quản trị và
-              thao tác theo đúng luồng nghiệp vụ hiện có.
+              Tâm điểm quản trị hiện tại là danh sách share links, màn tạo mới và modal
+              quản lý pass.
             </p>
           </div>
         </div>
@@ -96,7 +88,7 @@ export default async function AdminHomePage() {
             </p>
           </div>
 
-          <div className="mt-6 grid gap-4 lg:grid-cols-3">
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
             {featureCards.map((item) => (
               <div
                 key={item.href}

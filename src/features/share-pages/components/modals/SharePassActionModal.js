@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { updateSharePass } from "../../api/sharePage.api";
+import { updateShareLinkPass } from "../../api/shareLink.api";
 
 function fmtDate(value) {
   if (!value) return "-";
@@ -39,7 +39,7 @@ function getStatusTone(status) {
 
 export default function SharePassActionModal({
   open,
-  sharePageId,
+  shareLinkId,
   mode,
   pass,
   onOpenChange,
@@ -198,7 +198,7 @@ export default function SharePassActionModal({
         };
       }
 
-      const res = await updateSharePass(sharePageId, pass.id, payload);
+      const res = await updateShareLinkPass(shareLinkId, pass.id, payload);
 
       if (!res?.success) {
         setError(res?.message || "Failed to update pass");
@@ -223,13 +223,13 @@ export default function SharePassActionModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[92vh] w-[calc(100vw-1rem)] max-w-2xl flex-col overflow-hidden p-0 sm:h-auto sm:max-h-[90vh] sm:w-full">
-        <DialogHeader className="border-b px-4 py-4 sm:px-6 sm:py-5">
+      <DialogContent className="w-[min(96vw,56rem)] max-w-4xl overflow-hidden p-0">
+        <DialogHeader className="border-b px-5 py-4 md:px-6">
           <DialogTitle>{content.title}</DialogTitle>
           <DialogDescription>{content.description}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+        <div className="max-h-[calc(88vh-8.5rem)] overflow-y-auto px-5 py-5 md:px-6">
           <div className="space-y-4">
             <div className="grid grid-cols-1 gap-3 rounded-lg border p-4 text-sm sm:grid-cols-2">
               <div>
@@ -410,7 +410,7 @@ export default function SharePassActionModal({
           </div>
         </div>
 
-        <DialogFooter className="border-t px-4 py-4 sm:px-6">
+        <DialogFooter className="flex-col-reverse gap-2 border-t px-5 py-4 md:flex-row md:justify-end md:px-6">
           <Button
             type="button"
             variant="outline"

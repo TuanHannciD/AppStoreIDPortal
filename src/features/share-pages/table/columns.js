@@ -39,14 +39,23 @@ export function getColumns(actions) {
       cell: ({ row }) => <div className="font-mono">{row.getValue("code")}</div>,
     },
     {
-      accessorKey: "appName",
-      header: "App",
+      accessorKey: "appLabel",
+      header: "Tên ứng dụng",
       cell: ({ row }) => (
         <div>
-          <div className="font-medium">{row.original.appName}</div>
-          <div className="text-xs text-muted-foreground">{row.original.appSlug}</div>
+          <div className="font-medium">{row.original.appLabel}</div>
+          <div className="text-xs text-muted-foreground">{row.original.appDescription || "-"}</div>
         </div>
       ),
+    },
+    {
+      accessorKey: "apiUrl",
+      header: "Link nguồn",
+      cell: ({ row }) => {
+        const value = row.getValue("apiUrl");
+        if (!value) return <span className="text-muted-foreground">-</span>;
+        return <div className="max-w-[280px] truncate font-mono text-xs">{value}</div>;
+      },
     },
     {
       accessorKey: "note",
@@ -54,18 +63,18 @@ export function getColumns(actions) {
       cell: ({ row }) => {
         const value = row.getValue("note");
         if (!value) return <span className="text-muted-foreground">-</span>;
-        return <div className="max-w-[280px] truncate">{value}</div>;
+        return <div className="max-w-[220px] truncate">{value}</div>;
       },
-    },
-    {
-      accessorKey: "expiresAt",
-      header: "Hết hạn",
-      cell: ({ row }) => fmtDate(row.getValue("expiresAt")),
     },
     {
       accessorKey: "passCount",
       header: "Số pass",
       cell: ({ row }) => <div>{row.getValue("passCount")}</div>,
+    },
+    {
+      accessorKey: "expiresAt",
+      header: "Hết hạn",
+      cell: ({ row }) => fmtDate(row.getValue("expiresAt")),
     },
     {
       accessorKey: "createdAt",

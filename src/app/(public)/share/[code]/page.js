@@ -6,7 +6,7 @@ import SharePublicScreen from "@/features/share-public/components/SharePublicScr
  * URL dạng:
  * /share/[code]
  */
-export default async function SharePage({ params }) {
+export default async function ShareLinkPage({ params }) {
   const { code } = await params;
 
   return (

@@ -1,12 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { getCurrentAdminSession } from "@/lib/admin-session";
-import {
-  getSharePageDependencySummary,
-  hasSharePageDependencies,
-} from "@/lib/share-page-delete";
 
-const UpdateSharePageSchema = z.object({
+const UpdateShareLinkSchema = z.object({
+  apiUrl: z.string().max(2000).optional().nullable(),
   note: z.string().max(2000).optional().nullable(),
   expiresAt: z.string().datetime().optional().nullable(),
 });
@@ -29,20 +26,32 @@ async function parseDeleteBody(req) {
   }
 }
 
+async function getShareLinkDependencySummary(shareLinkId) {
+  const [passes, shareAuthLogs] = await Promise.all([
+    prisma.sharePass.count({ where: { shareLinkId } }),
+    prisma.shareAuthLog.count({ where: { shareLinkId } }),
+  ]);
+
+  return {
+    passes,
+    shareAuthLogs,
+  };
+}
+
 export async function GET(_req, { params }) {
   try {
-    const item = await prisma.sharePage.findUnique({
+    const item = await prisma.shareLink.findUnique({
       where: { id: params.id },
-      include: {
-        app: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            packageType: true,
-            description: true,
-          },
-        },
+      select: {
+        id: true,
+        code: true,
+        apiUrl: true,
+        note: true,
+        expiresAt: true,
+        createdAt: true,
+        updatedAt: true,
+        appLabel: true,
+        appDescription: true,
         _count: {
           select: {
             passes: true,
@@ -53,20 +62,29 @@ export async function GET(_req, { params }) {
 
     if (!item) {
       return Response.json(
-        { success: false, message: "Share page not found" },
+        { success: false, message: "Share link not found" },
         { status: 404 },
       );
     }
 
     return Response.json({
       success: true,
-      item,
+      item: {
+        ...item,
+        app: {
+          id: item.id,
+          name: item.appLabel,
+          slug: "-",
+          packageType: "-",
+          description: item.appDescription ?? "",
+        },
+      },
     });
   } catch (err) {
     return Response.json(
       {
         success: false,
-        message: "Failed to load share page detail",
+        message: "Failed to load share link detail",
         detail: String(err?.message || err),
       },
       { status: 500 },
@@ -77,7 +95,7 @@ export async function GET(_req, { params }) {
 export async function PATCH(req, { params }) {
   try {
     const body = await req.json();
-    const parsed = UpdateSharePageSchema.safeParse(body);
+    const parsed = UpdateShareLinkSchema.safeParse(body);
 
     if (!parsed.success) {
       return Response.json(
@@ -90,21 +108,22 @@ export async function PATCH(req, { params }) {
       );
     }
 
-    const exists = await prisma.sharePage.findUnique({
+    const exists = await prisma.shareLink.findUnique({
       where: { id: params.id },
       select: { id: true },
     });
 
     if (!exists) {
       return Response.json(
-        { success: false, message: "Share page not found" },
+        { success: false, message: "Share link not found" },
         { status: 404 },
       );
     }
 
-    const updated = await prisma.sharePage.update({
+    const updated = await prisma.shareLink.update({
       where: { id: params.id },
       data: {
+        apiUrl: parsed.data.apiUrl?.trim() || null,
         note: parsed.data.note ?? null,
         expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
       },
@@ -118,7 +137,7 @@ export async function PATCH(req, { params }) {
     return Response.json(
       {
         success: false,
-        message: "Failed to update share page",
+        message: "Failed to update share link",
         detail: String(err?.message || err),
       },
       { status: 500 },
@@ -135,10 +154,10 @@ export async function DELETE(req, { params }) {
     );
   }
 
-  const sharePageId = String(params?.id || "").trim();
-  if (!sharePageId) {
+  const shareLinkId = String(params?.id || "").trim();
+  if (!shareLinkId) {
     return Response.json(
-      { ok: false, message: "Share page not found." },
+      { ok: false, message: "Share link not found." },
       { status: 404 },
     );
   }
@@ -146,105 +165,114 @@ export async function DELETE(req, { params }) {
   const mode = parseDeleteMode(req);
   const { reason } = await parseDeleteBody(req);
 
-  const sharePage = await prisma.sharePage.findUnique({
-    where: { id: sharePageId },
+  const shareLink = await prisma.shareLink.findUnique({
+    where: { id: shareLinkId },
     select: {
       id: true,
       code: true,
-      appId: true,
-      app: {
-        select: {
-          name: true,
-        },
-      },
+      appLabel: true,
+      expiresAt: true,
     },
   });
 
-  if (!sharePage) {
+  if (!shareLink) {
     return Response.json(
-      { ok: false, message: "Share page not found." },
+      { ok: false, message: "Share link not found." },
       { status: 404 },
     );
   }
 
-  const dependencySummary = await getSharePageDependencySummary(sharePage.id);
-
-  if (mode === "SAFE_DELETE" && hasSharePageDependencies(dependencySummary)) {
-    await prisma.sharePageDeleteLog.create({
-      data: {
-        actorUserId: session.userId,
-        actorEmail: session.email,
-        sharePageId: sharePage.id,
-        sharePageCode: sharePage.code,
-        appId: sharePage.appId,
-        appName: sharePage.app?.name || "-",
-        mode: "SAFE_DELETE",
-        status: "BLOCKED",
-        reason,
-        dependencySummary,
-      },
-    });
-
-    return Response.json(
-      {
-        ok: false,
-        message: "Cannot delete share page because dependent records still exist.",
-        mode,
-        dependencySummary,
-      },
-      { status: 409 },
-    );
-  }
+  const dependencySummary = await getShareLinkDependencySummary(shareLink.id);
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.sharePage.delete({
-        where: { id: sharePage.id },
+    if (mode === "SAFE_DELETE") {
+      const now = new Date();
+
+      await prisma.$transaction(async (tx) => {
+        await tx.shareLink.update({
+          where: { id: shareLink.id },
+          data: {
+            expiresAt: now,
+          },
+        });
+
+        await tx.shareLinkDeleteLog.create({
+          data: {
+            actorUserId: session.userId,
+            actorEmail: session.email,
+            shareLinkId: shareLink.id,
+            shareLinkCode: shareLink.code,
+            appLabel: shareLink.appLabel,
+            reason,
+            status: "DELETED",
+            dependencySummary: {
+              mode,
+              action: "SOFT_DELETE",
+              ...dependencySummary,
+              previousExpiresAt: shareLink.expiresAt?.toISOString() ?? null,
+              appliedExpiresAt: now.toISOString(),
+            },
+          },
+        });
       });
 
-      await tx.sharePageDeleteLog.create({
+      return Response.json({
+        ok: true,
+        message: "Share link da duoc xoa mem bang cach ngung hieu luc ngay.",
+        mode,
+        dependencySummary,
+      });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.shareLinkDeleteLog.create({
         data: {
           actorUserId: session.userId,
           actorEmail: session.email,
-          sharePageId: sharePage.id,
-          sharePageCode: sharePage.code,
-          appId: sharePage.appId,
-          appName: sharePage.app?.name || "-",
-          mode,
-          status: "DELETED",
+          shareLinkId: shareLink.id,
+          shareLinkCode: shareLink.code,
+          appLabel: shareLink.appLabel,
           reason,
-          dependencySummary,
+          status: "DELETED",
+          dependencySummary: {
+            mode,
+            action: "HARD_DELETE",
+            ...dependencySummary,
+          },
         },
+      });
+
+      await tx.shareLink.delete({
+        where: { id: shareLink.id },
       });
     });
 
     return Response.json({
       ok: true,
-      message:
-        mode === "FORCE_DELETE"
-          ? "Share page and all dependent records were deleted."
-          : "Share page deleted successfully.",
+      message: "Share link da duoc xoa cung.",
       mode,
       dependencySummary,
     });
   } catch (error) {
-    await prisma.sharePageDeleteLog.create({
+    await prisma.shareLinkDeleteLog.create({
       data: {
         actorUserId: session.userId,
         actorEmail: session.email,
-        sharePageId: sharePage.id,
-        sharePageCode: sharePage.code,
-        appId: sharePage.appId,
-        appName: sharePage.app?.name || "-",
-        mode,
-        status: "FAILED",
+        shareLinkId: shareLink.id,
+        shareLinkCode: shareLink.code,
+        appLabel: shareLink.appLabel,
         reason: reason || String(error?.message || "Unknown delete error"),
-        dependencySummary,
+        status: "FAILED",
+        dependencySummary: {
+          mode,
+          action: mode === "FORCE_DELETE" ? "HARD_DELETE" : "SOFT_DELETE",
+          ...dependencySummary,
+        },
       },
     });
 
     return Response.json(
-      { ok: false, message: "Failed to delete share page." },
+      { ok: false, message: "Failed to delete share link." },
       { status: 500 },
     );
   }

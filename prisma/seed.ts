@@ -1,304 +1,246 @@
-import crypto from "node:crypto";
-import { PrismaClient } from "../src/generated/prisma/client";
-import { Role } from "../src/generated/prisma/enums";
-
+import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const adapter = new PrismaPg({
-  connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL!, // seed/migrate: dùng DIRECT 5432
-});
+import { PrismaClient } from "../src/generated/prisma/client";
+import { Role, ShareLinkDeleteStatus } from "../src/generated/prisma/enums";
 
+const connectionString = process.env.DATABASECus_URL || process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("Missing DIRECT_URL or DATABASE_URL for seeding");
+}
+
+const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
-const INT_MAX = 2147483647;
-
-function sha256(text: string) {
-  return crypto.createHash("sha256").update(text).digest("hex");
+function plusDays(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date;
 }
 
-function nowPlusDays(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function nowMinusDays(days: number) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d;
+async function createPass(shareLinkId: string, plainPass: string, quotaTotal: number, label?: string) {
+  return prisma.sharePass.create({
+    data: {
+      shareLinkId,
+      passwordHash: await bcrypt.hash(plainPass, 10),
+      quotaTotal,
+      quotaUsed: 0,
+      label: label ?? null,
+    },
+  });
 }
 
 async function main() {
-  // 1) One SUPER_ADMIN user
-  const user = await prisma.user.upsert({
+  const adminPassword = "admin-123456";
+
+  await prisma.shareAuthLog.deleteMany();
+  await prisma.shareLinkDeleteLog.deleteMany();
+  await prisma.sharePass.deleteMany();
+  await prisma.shareLink.deleteMany();
+  await prisma.user.deleteMany({
+    where: {
+      email: {
+        not: "admin@example.com",
+      },
+    },
+  });
+
+  const admin = await prisma.user.upsert({
     where: { email: "admin@example.com" },
-    update: {},
+    update: {
+      password: await bcrypt.hash(adminPassword, 10),
+      role: Role.SUPER_ADMIN,
+    },
     create: {
       email: "admin@example.com",
-      password: sha256("admin-123456"), // demo hash; production dùng bcrypt/argon2
+      password: await bcrypt.hash(adminPassword, 10),
       role: Role.SUPER_ADMIN,
     },
   });
 
-  await prisma.shareAuthLog.deleteMany();
-  await prisma.sharePassVerification.deleteMany();
-  await prisma.sharePageAccount.deleteMany();
-  await prisma.sharePass.deleteMany();
-  await prisma.sharePage.deleteMany();
-  await prisma.appAccount.deleteMany();
-  await prisma.app.deleteMany();
-  await prisma.apiSourceConfig.deleteMany();
-
-  const appleProSource = await prisma.apiSourceConfig.upsert({
-    where: { id: "seed-applepro-source" },
-    update: {
-      name: "ApplePro Seed",
-      baseUrl: "https://applepro.yuichycsa.id.vn/shareapi",
-      isActive: true,
-    },
-    create: {
-      id: "seed-applepro-source",
-      name: "ApplePro Seed",
-      baseUrl: "https://applepro.yuichycsa.id.vn/shareapi",
-      isActive: true,
-    },
-  });
-
-  const backupSource = await prisma.apiSourceConfig.upsert({
-    where: { id: "seed-backup-source" },
-    update: {
-      name: "Backup Source",
-      baseUrl: "https://backup.example.com/shareapi",
-      isActive: false,
-    },
-    create: {
-      id: "seed-backup-source",
-      name: "Backup Source",
-      baseUrl: "https://backup.example.com/shareapi",
-      isActive: false,
+  const movieShareLink = await prisma.shareLink.create({
+    data: {
+      code: "MOVIEVIP01",
+      appLabel: "Movie VIP",
+      appDescription: "Goi chia se tai khoan xem phim premium cho nguoi dung noi bo.",
+      apiUrl: "https://example.com/integrations/movie-vip",
+      apiMethod: "GET",
+      apiKey: "seed-movie-vip-key",
+      apiAppId: "movie-vip",
+      apiConfig: {
+        headers: {
+          "x-api-key": "seed-movie-vip-key",
+        },
+        passField: "password",
+        emailField: "email",
+      },
+      note: "Seed data for admin testing",
+      expiresAt: plusDays(30),
+      consumeOnVerify: false,
+      ownerId: admin.id,
     },
   });
 
-  // Helper create App
-  async function createApp(i: number, group: string) {
-    return prisma.app.create({
-      data: {
-        slug: `${group}-app-${i}`,
-        name: `${group.toUpperCase()} App ${i}`,
-        packageType: "test",
-        description: `Seed group=${group}`,
-        ownerId: user.id,
+  const musicShareLink = await prisma.shareLink.create({
+    data: {
+      code: "MUSICPRO01",
+      appLabel: "Music Pro",
+      appDescription: "Goi share link cho ung dung nghe nhac, du lieu lay tu API ngoai.",
+      apiUrl: "https://example.com/integrations/music-pro",
+      apiMethod: "POST",
+      apiKey: "seed-music-pro-key",
+      apiAppId: "music-pro",
+      apiConfig: {
+        headers: {
+          Authorization: "Bearer seed-music-pro-key",
+        },
+        requestBody: {
+          source: "codex-seed",
+        },
       },
-    });
-  }
+      note: "Share link co 2 pass de test UI va quota",
+      expiresAt: plusDays(60),
+      rateEnabled: true,
+      rateWindowSec: 120,
+      rateMaxRequests: 15,
+      consumeOnVerify: true,
+      ownerId: admin.id,
+    },
+  });
 
-  async function createAppAccounts(appId: string, group: string, appIndex: number) {
-    const syncedAccount = await prisma.appAccount.create({
-      data: {
-        appId,
-        title: `${group.toUpperCase()} Synced Account ${appIndex}`,
-        email: `app${group}${appIndex}.01@appstoreviet.com`,
-        username: `app${group}${appIndex}.01@appstoreviet.com`,
-        password: `Asv_${group}_${appIndex}_01`,
-        note: "Seed synced account from external API",
-        isActive: true,
-        apiSourceConfigId: appleProSource.id,
-        externalKey: `test-${group}-${appIndex}-01`,
-        lastSyncedAt: new Date(),
-        lastSyncStatus: "SUCCESS",
-        lastSyncError: null,
+  const expiredShareLink = await prisma.shareLink.create({
+    data: {
+      code: "EXPIRED01",
+      appLabel: "Expired Demo",
+      appDescription: "Share link het han de test trang thai va log.",
+      apiUrl: "https://example.com/integrations/expired-demo",
+      apiMethod: "GET",
+      apiAppId: "expired-demo",
+      note: "Seed share link da het han",
+      expiresAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      rateEnabled: true,
+      rateWindowSec: 60,
+      rateMaxRequests: 5,
+      consumeOnVerify: false,
+      ownerId: admin.id,
+    },
+  });
+
+  const moviePassA = await createPass(movieShareLink.id, "movie-pass-01", 50, "Khach A");
+  const moviePassB = await createPass(movieShareLink.id, "movie-pass-02", 50, "Khach B");
+
+  const musicPass = await prisma.sharePass.create({
+    data: {
+      shareLinkId: musicShareLink.id,
+      passwordHash: await bcrypt.hash("music-pass-01", 10),
+      quotaTotal: 20,
+      quotaUsed: 3,
+      label: "Team Music",
+      lastVerifiedAt: new Date(),
+      lastRevealedAt: new Date(),
+    },
+  });
+
+  await prisma.sharePass.create({
+    data: {
+      shareLinkId: expiredShareLink.id,
+      passwordHash: await bcrypt.hash("expired-pass-01", 10),
+      quotaTotal: 5,
+      quotaUsed: 1,
+      label: "Expired User",
+      revokedAt: null,
+      expiresAt: new Date(Date.now() - 12 * 60 * 60 * 1000),
+    },
+  });
+
+  await prisma.shareAuthLog.createMany({
+    data: [
+      {
+        shareLinkId: movieShareLink.id,
+        shareLinkCode: movieShareLink.code,
+        sharePassId: moviePassA.id,
+        sharePassLabel: moviePassA.label,
+        action: "VERIFY_PASS",
+        success: true,
+        message: "Seed verify success",
+        ipAddress: "127.0.0.1",
+        userAgent: "seed-script/1.0",
       },
-    });
-
-    const manualAccount = await prisma.appAccount.create({
-      data: {
-        appId,
-        title: `${group.toUpperCase()} Manual Account ${appIndex}`,
-        email: `manual.${group}.${appIndex}@example.com`,
-        username: `manual-${group}-${appIndex}`,
-        password: `Manual_${group}_${appIndex}`,
-        note: "Seed manual account without external sync",
-        isActive: appIndex % 4 !== 0,
-        apiSourceConfigId: appIndex % 2 === 0 ? backupSource.id : null,
-        externalKey: appIndex % 2 === 0 ? `backup-${group}-${appIndex}` : null,
-        lastSyncedAt: appIndex % 2 === 0 ? nowMinusDays(1) : null,
-        lastSyncStatus: appIndex % 2 === 0 ? "FAILED" : null,
-        lastSyncError: appIndex % 2 === 0 ? "Seed timeout from backup source" : null,
+      {
+        shareLinkId: movieShareLink.id,
+        shareLinkCode: movieShareLink.code,
+        sharePassId: moviePassB.id,
+        sharePassLabel: moviePassB.label,
+        action: "INVALID_PASS",
+        success: false,
+        message: "Seed invalid pass attempt",
+        ipAddress: "127.0.0.1",
+        userAgent: "seed-script/1.0",
       },
-    });
-
-    return [syncedAccount, manualAccount];
-  }
-
-  // Helper create SharePage + passes + logs
-  async function createPageBundle(appId: string, pageIdx: number, opts: {
-    expired?: boolean;
-    maxLimits?: boolean;
-    quotaNearlyExhausted?: boolean;
-    revokedPasses?: boolean;
-  }) {
-    const code = `${appId.slice(0, 6).toUpperCase()}-${String(pageIdx).padStart(2, "0")}-${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
-
-    const page = await prisma.sharePage.create({
-      data: {
-        code,
-        appId,
-        note: `Seed page ${pageIdx}`,
-        expiresAt: opts.expired ? nowMinusDays(1) : null,
-
-        // max policy if requested
-        rateEnabled: true,
-        rateWindowSec: opts.maxLimits ? INT_MAX : 60,
-        rateMaxRequests: opts.maxLimits ? INT_MAX : 30,
-
-        passQuotaTotal: opts.maxLimits ? INT_MAX : 50,
-        consumeOnVerify: true,
+      {
+        shareLinkId: musicShareLink.id,
+        shareLinkCode: musicShareLink.code,
+        sharePassId: musicPass.id,
+        sharePassLabel: musicPass.label,
+        action: "REVEAL",
+        success: true,
+        message: "Seed reveal success",
+        ipAddress: "127.0.0.1",
+        userAgent: "seed-script/1.0",
       },
-    });
+      {
+        shareLinkId: expiredShareLink.id,
+        shareLinkCode: expiredShareLink.code,
+        action: "LINK_EXPIRED",
+        success: false,
+        message: "Seed expired link access",
+        ipAddress: "127.0.0.1",
+        userAgent: "seed-script/1.0",
+      },
+    ],
+  });
 
-    // 10 SharePass per page
-    const passData = Array.from({ length: 10 }).map((_, j) => {
-      const rawPass = `pass-${pageIdx}-${j}`;
-      const revoked = opts.revokedPasses && j % 3 === 0; // revoke ~1/3
-      const quotaTotal = opts.maxLimits ? INT_MAX : 100;
+  await prisma.shareLinkDeleteLog.create({
+    data: {
+      actorUserId: admin.id,
+      actorEmail: admin.email,
+      shareLinkCode: "OLD-DELETED-01",
+      appLabel: "Old Removed App",
+      reason: "Seed delete log for audit screen",
+      status: ShareLinkDeleteStatus.DELETED,
+      dependencySummary: {
+        passes: 3,
+        authLogs: 12,
+      },
+    },
+  });
 
-      let quotaUsed = 0;
-      if (opts.quotaNearlyExhausted) {
-        quotaUsed = Math.max(0, quotaTotal - 1); // gần hết
-      }
-
-      return {
-        sharePageId: page.id,
-        passwordHash: sha256(rawPass),
-        quotaTotal,
-        quotaUsed,
-        revokedAt: revoked ? new Date() : null,
-        reason: revoked ? "ADMIN_REVOKED" : null,
-        expiresAt: opts.expired ? nowMinusDays(1) : null,
-        lastVerifiedAt: null,
-      };
-    });
-
-    // createMany returns count only; we need ids for logs → create individually OR query after insert
-    await prisma.sharePass.createMany({ data: passData });
-
-    const passes = await prisma.sharePass.findMany({
-      where: { sharePageId: page.id },
-      select: { id: true },
-    });
-
-    // 10 logs per page (mix success/fail, some rate/quota blocks)
-    const logData = Array.from({ length: 10 }).map((_, k) => {
-      const kind = k % 5;
-      const action =
-        kind === 0 ? "VERIFY_PASS" :
-        kind === 1 ? "REVEAL" :
-        kind === 2 ? "API_CALL" :
-        kind === 3 ? "RATE_LIMIT_BLOCK" :
-                     "QUOTA_BLOCK";
-
-      const success = action === "RATE_LIMIT_BLOCK" || action === "QUOTA_BLOCK" ? false : (k % 2 === 0);
-      const sharePassId = passes.length ? passes[k % passes.length].id : null;
-
-      return {
-        sharePageId: page.id,
-        sharePassId,
-        action,
-        success,
-        message: `seed log ${k} (${action})`,
-        ipAddress: `192.168.1.${k + 10}`,
-        userAgent: "seed-agent/1.0",
-      };
-    });
-
-    await prisma.shareAuthLog.createMany({ data: logData });
-
-    return page;
-  }
-
-  // 2) Create groups, each group creates 10 apps; each app 10 pages; each page 10 passes/logs
-  const groups: Array<{ name: string; opts: Parameters<typeof createPageBundle>[2] }> = [
-    { name: "normal", opts: { expired: false, maxLimits: false, quotaNearlyExhausted: false, revokedPasses: false } },
-    { name: "max", opts: { expired: false, maxLimits: true, quotaNearlyExhausted: false, revokedPasses: false } },
-    { name: "expired", opts: { expired: true, maxLimits: true, quotaNearlyExhausted: false, revokedPasses: false } },
-    { name: "edge", opts: { expired: false, maxLimits: true, quotaNearlyExhausted: true, revokedPasses: true } },
-  ];
-
-  for (const g of groups) {
-    for (let i = 1; i <= 10; i++) {
-      const app = await createApp(i, g.name);
-      const appAccounts = await createAppAccounts(app.id, g.name, i);
-      const createdPages: Array<{ id: string }> = [];
-
-      for (let p = 1; p <= 10; p++) {
-        const page = await createPageBundle(app.id, p, g.opts);
-        createdPages.push({ id: page.id });
-      }
-
-      for (let pageIdx = 0; pageIdx < createdPages.length; pageIdx += 1) {
-        const page = createdPages[pageIdx];
-        await prisma.sharePageAccount.createMany({
-          data: appAccounts.map((account, accountIdx) => ({
-            sharePageId: page.id,
-            appAccountId: account.id,
-            sortOrder: accountIdx,
-            isActive: pageIdx % 5 !== 0 || accountIdx === 0,
-          })),
-        });
-      }
-
-      const firstPage = createdPages[0];
-      if (firstPage) {
-        const passes = await prisma.sharePass.findMany({
-          where: { sharePageId: firstPage.id },
-          select: { id: true },
-          take: 3,
-        });
-
-        await prisma.sharePassVerification.createMany({
-          data: passes.map((pass, idx) => ({
-            token: `verify-${g.name}-${i}-${idx}-${crypto.randomBytes(6).toString("hex")}`,
-            sharePageId: firstPage.id,
-            sharePassId: pass.id,
-            expiresAt: nowPlusDays(1),
-            consumedAt: idx === 2 ? new Date() : null,
-          })),
-        });
-      }
-    }
-  }
-
-  // quick counts
-  const [u, apiSources, a, appAccounts, sp, spa, pass, verifications, log] = await Promise.all([
+  const [users, shareLinks, sharePasses, authLogs, deleteLogs] = await Promise.all([
     prisma.user.count(),
-    prisma.apiSourceConfig.count(),
-    prisma.app.count(),
-    prisma.appAccount.count(),
-    prisma.sharePage.count(),
-    prisma.sharePageAccount.count(),
+    prisma.shareLink.count(),
     prisma.sharePass.count(),
-    prisma.sharePassVerification.count(),
     prisma.shareAuthLog.count(),
+    prisma.shareLinkDeleteLog.count(),
   ]);
 
-  console.log("✅ Seed done");
+  console.log("Seed completed");
   console.log({
-    users: u,
-    apiSources,
-    apps: a,
-    appAccounts,
-    sharePages: sp,
-    sharePageAccounts: spa,
-    sharePasses: pass,
-    sharePassVerifications: verifications,
-    shareAuthLogs: log,
+    users,
+    shareLinks,
+    sharePasses,
+    authLogs,
+    deleteLogs,
   });
-  console.log("Login demo:", { email: "admin@example.com", password: "admin-123456" });
+  console.log("Admin login", {
+    email: "admin@example.com",
+    password: adminPassword,
+  });
 }
 
 main()
-  .catch((e) => {
-    console.error("❌ Seed failed:", e);
+  .catch((error) => {
+    console.error("Seed failed", error);
     process.exit(1);
   })
   .finally(async () => {
