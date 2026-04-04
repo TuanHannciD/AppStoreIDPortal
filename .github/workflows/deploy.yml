@@ -141,7 +141,7 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           APP_NAME: AppStoreIDPortalCustomer
-          APP_PATH: /www/deploy/AppStoreIDPortal-customer
+          APP_PATH: /www/wwwroot/AppStoreIDPortal-customer
           APP_PORT: "3001"
           DEPLOY_BRANCH: customer
           SOURCE_REPO_PATH: /www/wwwroot/AppStoreIDPortal
