@@ -156,11 +156,25 @@ jobs:
           script: |
             set -e
 
+            if [ ! -d "$SOURCE_REPO_PATH/.git" ]; then
+              echo "Missing source repository at $SOURCE_REPO_PATH"
+              exit 1
+            fi
+
+            REPO_URL="$(git -C "$SOURCE_REPO_PATH" remote get-url origin)"
+
+            if [ -z "$REPO_URL" ]; then
+              echo "Unable to determine origin URL from $SOURCE_REPO_PATH"
+              exit 1
+            fi
+
             if [ ! -d "$APP_PATH/.git" ]; then
-              git clone "$SOURCE_REPO_PATH" "$APP_PATH"
+              git clone --branch "$DEPLOY_BRANCH" "$REPO_URL" "$APP_PATH"
             fi
 
             cd "$APP_PATH"
+
+            git remote set-url origin "$REPO_URL"
 
             git fetch origin
 
