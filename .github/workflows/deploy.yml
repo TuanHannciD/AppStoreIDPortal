@@ -144,7 +144,7 @@ jobs:
           APP_PATH: /www/wwwroot/AppStoreIDPortal-customer
           APP_PORT: "3001"
           DEPLOY_BRANCH: customer
-          SOURCE_REPO_PATH: /www/wwwroot/AppStoreIDPortal
+          REPO_URL: ${{ format('git@github.com:{0}.git', github.repository) }}
           SERVER_ENV_FILE: ${{ secrets.ENV_FILE_APPSTOREIDPORTAL_CUSTOMER }}
           HAS_CUSTOMER_MIGRATION: ${{ needs.verify.outputs.has_customer_migration }}
         with:
@@ -152,19 +152,12 @@ jobs:
           username: ${{ secrets.USERNAME_APPSTOREIDPORTAL }}
           port: ${{ secrets.PORT_APPSTOREIDPORTAL }}
           key: ${{ secrets.SSH_KEY_APPSTOREIDPORTAL }}
-          envs: APP_NAME,APP_PATH,APP_PORT,DEPLOY_BRANCH,SOURCE_REPO_PATH,SERVER_ENV_FILE,HAS_CUSTOMER_MIGRATION
+          envs: APP_NAME,APP_PATH,APP_PORT,DEPLOY_BRANCH,REPO_URL,SERVER_ENV_FILE,HAS_CUSTOMER_MIGRATION
           script: |
             set -e
 
-            if [ ! -d "$SOURCE_REPO_PATH/.git" ]; then
-              echo "Missing source repository at $SOURCE_REPO_PATH"
-              exit 1
-            fi
-
-            REPO_URL="$(git -C "$SOURCE_REPO_PATH" remote get-url origin)"
-
             if [ -z "$REPO_URL" ]; then
-              echo "Unable to determine origin URL from $SOURCE_REPO_PATH"
+              echo "Missing repository URL"
               exit 1
             fi
 
